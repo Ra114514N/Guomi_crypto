@@ -1,0 +1,4 @@
+gmssl==3.2.2
+gmssl-python==2.2.2
+pycryptodome>=3.20.0
+pytest>=7.0
