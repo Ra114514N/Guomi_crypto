@@ -1,10 +1,27 @@
-# 国密安全数据传输系统
+# Guomi Crypto Secure Transport
 
-本项目是一个大学生课程设计，演示基于国密算法的安全数据传输流程。当前版本采用 envelope v3.0：发送端只生成一个统一报文 `message.json`，接收端只读取该报文完成解封装、验签、完整性验证和解密。
+本项目是一个大学生课程设计，实现了一套基于国密算法的安全数据传输演示系统。系统以单一 envelope 报文为核心，模拟发送端生成安全报文、接收端验证并恢复明文的完整流程。
 
-## 协议结构
+## 功能概览
 
-`message.json` 是唯一协议载体，结构包含：
+- SM2：封装会话秘密。
+- HKDF-SM3：派生加密密钥、IV/nonce 和完整性密钥。
+- SM4：支持 CBC、CTR、GCM 三种加密模式。
+- ZUC-128：提供流加密路径。
+- HMAC-SM3：为非 GCM 模式提供完整性保护。
+- SM9：对完整协议 transcript 进行数字签名与验签。
+- CLI：提供环境检查、演示、发送、基准测试和测试入口。
+- GUI：提供图形化演示、发送接收和性能测试入口。
+
+## 协议报文
+
+发送端输出一个统一报文：
+
+```text
+artifacts/message.json
+```
+
+报文结构：
 
 ```text
 Envelope {
@@ -30,98 +47,133 @@ Envelope {
 }
 ```
 
-## 算法职责
-
-| 算法 | 职责 |
-| --- | --- |
-| SM2 | 封装 16 字节会话秘密，不再描述为交互式密钥协商 |
-| HKDF-SM3 | 从会话秘密派生 SM4/ZUC 密钥、IV/nonce 和 HMAC 密钥 |
-| SM4 | 默认业务加密算法，支持 CBC / CTR / GCM |
-| ZUC-128 | 兼容路径的流加密算法 |
-| HMAC-SM3 | 为非 GCM 路径提供完整性保护 |
-| SM9 | 对完整 transcript 签名 |
-
-KDF 绑定上下文：
+KDF 上下文绑定：
 
 ```text
 session_id | sender_id | receiver_id | suite_id
 ```
 
-签名 transcript 覆盖：
+SM9 签名 transcript：
 
 ```text
 header || wrapped_secret || nonce_or_iv || ciphertext || auth_tag
 ```
 
-因此 `nonce/iv`、密文、封装密钥和协议头都处于同一个认证边界内。
+## 项目结构
 
-## 发送流程
+```text
+core/
+  protocol.py       协议常量
+  sender.py         发送端流程
+  receiver.py       接收端流程
+  workflow.py       一键完整流程
+  benchmark.py      性能测试
 
-1. 生成随机 `session_secret`。
-2. 生成 `session_id`、`timestamp`、`seq`。
-3. 使用 SM2 封装 `session_secret`。
-4. 使用 HKDF-SM3 派生业务密钥。
-5. 使用 SM4 或 ZUC 加密明文。
-6. 生成 GCM tag 或 HMAC-SM3 tag。
-7. 使用 SM9 签名完整 transcript。
-8. 写出单一报文 `artifacts/message.json`。
+crypto/
+  sm2_kex_or_wrap.py  SM2 会话秘密封装
+  sm3_integrity.py    SM3/HMAC/transcript 工具
+  sm4_adapter.py      SM4 CBC/CTR/GCM
+  sm9_signature.py    SM9 签名与验签
+  zuc_adapter.py      ZUC-128
+  kdf_utils.py        HKDF-SM3 派生
+  metadata_utils.py   envelope 读写
 
-## 接收流程
+tests/
+  test_crypto.py      回归测试
 
-1. 读取 `message.json`。
-2. 使用 SM2 解封装 `session_secret`。
-3. 使用相同上下文派生业务密钥。
-4. 验证 SM9 签名和完整性标签。
-5. 验证通过后解密。
-6. 写出 `artifacts/recovered.txt`。
-
-## 快速开始
-
-```bash
-pip install -r requirements.txt
-
-python cli.py inspect-env
-python cli.py demo
-python cli.py demo --cipher sm4 --mode gcm
-python cli.py demo --cipher zuc
-
-python cli.py send --cipher sm4 --mode gcm --in plain.txt
-
-python cli.py benchmark
-python cli.py test
+cli.py                命令行入口
+gui.py                图形界面入口
+plain.txt             示例明文
 ```
 
-GUI：
+## 环境准备
+
+推荐在 `pytorch` conda 环境中运行：
 
 ```bash
-python gui.py
+conda run -n pytorch python -m pip install -r requirements.txt
 ```
+
+SM9 依赖 GmSSL 原生动态库。如果环境中缺少原生库，SM9 完整流程无法运行。
+
+## 命令行使用
+
+环境检查：
+
+```bash
+conda run -n pytorch python cli.py inspect-env
+```
+
+完整演示：
+
+```bash
+conda run -n pytorch python cli.py demo
+conda run -n pytorch python cli.py demo --cipher sm4 --mode gcm
+conda run -n pytorch python cli.py demo --cipher zuc
+```
+
+生成 envelope：
+
+```bash
+conda run -n pytorch python cli.py send --cipher sm4 --mode gcm --in plain.txt
+```
+
+性能测试：
+
+```bash
+conda run -n pytorch python cli.py benchmark
+```
+
+运行测试：
+
+```bash
+conda run -n pytorch python -m pytest tests/ -q
+```
+
+## GUI 使用
+
+```bash
+conda run -n pytorch python gui.py
+```
+
+GUI 包含：
+
+- Environment：查看运行环境。
+- Demo：一键执行完整流程。
+- Send/Receive：图形化发送接收演示。
+- Benchmark：运行性能测试。
 
 ## 输出文件
 
-| 文件 | 说明 |
-| --- | --- |
-| `message.json` | 唯一协议报文 |
-| `receiver_pri.txt` | 演示用接收方 SM2 私钥 |
-| `receiver_pub.txt` | 演示用接收方 SM2 公钥 |
-| `recovered.txt` | 接收端恢复出的明文 |
-| `benchmark.md` | 性能测试报告 |
-| `benchmark.csv` | 性能测试数据 |
+运行后主要输出在 `artifacts/`：
 
-旧版本中的 `ciphertext.bin`、`wrapped_key.bin`、`iv.bin`、`integrity_tag.bin`、`signature.bin`、`plain_digest.bin` 已弃用，相关内容现在都封装在 `message.json` 中。
+```text
+message.json      统一协议报文
+receiver_pri.txt  演示用接收方 SM2 私钥
+receiver_pub.txt  演示用接收方 SM2 公钥
+recovered.txt     接收端恢复出的明文
+benchmark.md      性能测试报告
+benchmark.csv     性能测试数据
+```
 
-说明：当前 Windows 环境中的 `gmssl-python` SM9 主密钥对象不能可靠跨进程序列化，相关 PEM 导出接口也可能触发原生库访问异常。因此完整验签流程使用 `demo` 或 GUI，它们在同一进程中持有 SM9 主密钥；`send` 命令用于生成 envelope 报文。
+## 测试覆盖
 
-## 测试重点
+测试包括：
 
-测试覆盖：
+- SM2 封装和解封装。
+- HKDF-SM3 上下文绑定。
+- HMAC-SM3 完整性验证。
+- SM4 CBC/CTR/GCM 加解密。
+- ZUC-128 加解密。
+- envelope 完整发送接收流程。
+- 篡改 ciphertext、nonce_or_iv、receiver_id 后验证失败。
 
-- SM2 封装/解封装
-- HKDF-SM3 上下文绑定
-- SM3/HMAC-SM3
-- SM4 CBC/CTR/GCM
-- ZUC-128
-- 完整 envelope 工作流
-- 篡改 `ciphertext`、`nonce_or_iv`、`receiver_id` 后验证失败
+当前验证结果：
 
-如果当前 Python 环境缺少 `gmssl` 包，测试会跳过依赖国密适配层的用例。
+```text
+17 passed
+```
+
+## 说明
+
+当前 Windows 环境中的 `gmssl-python` SM9 主密钥对象不能稳定跨进程序列化，因此推荐使用 `demo` 或 GUI 完整演示流程。它们在同一进程中持有 SM9 主密钥，可以完成签名和验签。
