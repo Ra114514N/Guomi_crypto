@@ -88,52 +88,70 @@ plain.txt             示例明文
 
 ## 环境准备
 
-推荐在 `pytorch` conda 环境中运行：
+建议使用 Python 3.10 或更高版本。可以使用系统 Python、虚拟环境或 conda 环境。
+
+使用普通 Python 环境：
 
 ```bash
-conda run -n pytorch python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-SM9 依赖 GmSSL 原生动态库。如果环境中缺少原生库，SM9 完整流程无法运行。
+使用 venv：
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
+
+使用 conda：
+
+```bash
+conda create -n guomi-crypto python=3.12
+conda activate guomi-crypto
+python -m pip install -r requirements.txt
+```
+
+SM9 依赖 GmSSL 原生动态库。如果环境中缺少原生库，SM9 完整流程无法运行。可以先执行环境检查命令确认本机支持情况。
 
 ## 命令行使用
 
 环境检查：
 
 ```bash
-conda run -n pytorch python cli.py inspect-env
+python cli.py inspect-env
 ```
 
 完整演示：
 
 ```bash
-conda run -n pytorch python cli.py demo
-conda run -n pytorch python cli.py demo --cipher sm4 --mode gcm
-conda run -n pytorch python cli.py demo --cipher zuc
+python cli.py demo
+python cli.py demo --cipher sm4 --mode gcm
+python cli.py demo --cipher zuc
 ```
 
 生成 envelope：
 
 ```bash
-conda run -n pytorch python cli.py send --cipher sm4 --mode gcm --in plain.txt
+python cli.py send --cipher sm4 --mode gcm --in plain.txt
 ```
 
 性能测试：
 
 ```bash
-conda run -n pytorch python cli.py benchmark
+python cli.py benchmark
 ```
 
 运行测试：
 
 ```bash
-conda run -n pytorch python -m pytest tests/ -q
+python -m pytest tests/ -q
 ```
 
 ## GUI 使用
 
 ```bash
-conda run -n pytorch python gui.py
+python gui.py
 ```
 
 GUI 包含：
