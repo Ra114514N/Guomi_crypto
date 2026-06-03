@@ -12,22 +12,56 @@ Layout:
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QPoint, QTimer, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFrame, QLabel, QPushButton, QComboBox, QLineEdit,
     QFileDialog, QStackedWidget, QSplitter,
+    QGraphicsOpacityEffect,
 )
 
 from gui import styles
-from gui.effects import add_drop_shadow, BusyDot, StatusIndicator, BrandMark
+from gui.effects import add_drop_shadow, BusyDot, StatusIndicator
 from gui.log_widget import LogWidget
 from gui.timeline_view import TimelineView
 from gui.tabs.env_tab import EnvTab
-from gui.tabs.benchmark_tab import BenchmarkTab
+from gui.receiver_window import ReceiverWindow
 
 
 # PLACEHOLDER_APPEND_MARKER
+
+
+class ThemeTransitionOverlay(QWidget):
+    """Full-window overlay that cross-fades from old theme screenshot to new."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._pixmap = QPixmap()
+
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self._opacity_effect.setOpacity(1.0)
+        self.setGraphicsEffect(self._opacity_effect)
+
+    @property
+    def opacity_effect(self):
+        return self._opacity_effect
+
+    def set_old_skin(self, pixmap: QPixmap):
+        self._pixmap = pixmap
+        self.resize(self.parent().size())
+        self.raise_()
+        self.show()
+
+    def paintEvent(self, event):
+        if not self._pixmap.isNull():
+            painter = QPainter(self)
+            painter.drawPixmap(0, 0, self._pixmap)
+            painter.end()
+
+    def resizeEvent(self, event):
+        if self.parent():
+            self.resize(self.parent().size())
 
 
 class MainWindow(QMainWindow):
@@ -36,10 +70,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._drag_pos = QPoint()
-        self._current_theme = "深空"
-        self._is_dark = True
+        self._current_theme = "默认"
+        self._is_dark = False
         self._exec_worker = None
         self._current_nav = "demo"
+        self._receiver_win = None
 
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -49,6 +84,11 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._apply_theme()
         self.log_message.connect(self._append_log)
+
+        # Window icon (taskbar + alt-tab)
+        icon_path = self._resolve_asset("logo.ico")
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         QTimer.singleShot(80, self._emit_welcome)
 
@@ -80,22 +120,38 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 0, 10, 0)
         layout.setSpacing(12)
 
-        self.brand_mark = BrandMark(color=styles.accent_color)
-        layout.addWidget(self.brand_mark)
+        # Logo in title bar
+        logo_path = self._resolve_asset("logo.png")
+        self._logo_label = QLabel()
+        if logo_path.exists():
+            pix = QPixmap(str(logo_path)).scaled(
+                24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self._logo_label.setPixmap(pix)
+        self._logo_label.setFixedSize(28, 28)
+        self._logo_label.setStyleSheet("background: transparent;")
+        layout.addWidget(self._logo_label)
 
-        self.title_label = QLabel("国密安全数据传输演示系统")
+        self.title_label = QLabel("\U0001f4e4 国密安全传输 — 发送端")
         self.title_label.setObjectName("titleLabel")
         self.title_label.setFont(QFont(styles.current_font_family, 11, QFont.Bold))
         layout.addWidget(self.title_label)
         layout.addStretch()
 
         # Algorithm selector
+        algo_emoji = QLabel("\U0001f510")
+        algo_emoji.setStyleSheet("background: transparent; font-size: 14px;")
+        layout.addWidget(algo_emoji)
+
         self.algo_combo = QComboBox()
-        self.algo_combo.addItems(["sm4-gcm", "sm4-cbc", "sm4-ctr", "zuc"])
+        self.algo_combo.addItems(["zuc", "sm4-gcm", "sm4-cbc", "sm4-ctr"])
         self.algo_combo.setFixedWidth(110)
         layout.addWidget(self.algo_combo)
 
         # Attack simulation selector — tampers the envelope before receiving
+        attack_emoji = QLabel("⚔️")
+        attack_emoji.setStyleSheet("background: transparent; font-size: 14px;")
+        layout.addWidget(attack_emoji)
+
         self.attack_combo = QComboBox()
         self.attack_combo.addItem("正常传输", "none")
         self.attack_combo.addItem("篡改密文", "ciphertext")
@@ -107,6 +163,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.attack_combo)
 
         # File picker (compact)
+        file_emoji = QLabel("\U0001f4c1")
+        file_emoji.setStyleSheet("background: transparent; font-size: 14px;")
+        layout.addWidget(file_emoji)
+
         self.file_edit = QLineEdit(str(self._default_plain()))
         self.file_edit.setFixedWidth(180)
         self.file_edit.setPlaceholderText("明文文件路径")
@@ -129,10 +189,10 @@ class MainWindow(QMainWindow):
         self.busy_dot = BusyDot(color=styles.accent_color)
         layout.addWidget(self.busy_dot)
 
-        # Theme button — minimal glyph
+        # Theme toggle — switch between light/dark
         self.theme_btn = self._win_control_button("◑", "WinThemeButton")
-        self.theme_btn.setToolTip("切换主题")
-        self.theme_btn.clicked.connect(self._open_theme_selector)
+        self.theme_btn.setToolTip("切换深色/浅色")
+        self.theme_btn.clicked.connect(self._toggle_dark_mode)
         layout.addWidget(self.theme_btn)
 
         # Window controls — geometric micro-glyphs
@@ -181,7 +241,6 @@ class MainWindow(QMainWindow):
             ("demo", "◈\n演示"),
             ("send_recv", "◈\n收发"),
             ("env", "◈\n环境"),
-            ("bench", "◈\n性能"),
         ]
         for key, label in nav_items:
             btn = QPushButton(label)
@@ -219,10 +278,6 @@ class MainWindow(QMainWindow):
         # Page 1: Env tab
         self.env_tab = EnvTab(self.log_message)
         self._stack.addWidget(self.env_tab)
-
-        # Page 2: Benchmark tab
-        self.benchmark_tab = BenchmarkTab(self.log_message)
-        self._stack.addWidget(self.benchmark_tab)
 
         self._stack.setCurrentIndex(0)
         parent_layout.addWidget(self._stack, 1)
@@ -304,26 +359,37 @@ class MainWindow(QMainWindow):
         for btn in (self.theme_btn, self.min_btn, self.max_btn, self.close_btn):
             btn.setStyleSheet(styles.win_control_style)
 
-        self.brand_mark.set_color(styles.accent_color)
         self.busy_dot.set_color(styles.accent_color)
         self.timeline.refresh_styles()
 
         if hasattr(self, 'env_tab') and hasattr(self.env_tab, 'refresh_styles'):
             self.env_tab.refresh_styles()
-        if hasattr(self, 'benchmark_tab') and hasattr(self.benchmark_tab, 'refresh_styles'):
-            self.benchmark_tab.refresh_styles()
 
-    def _open_theme_selector(self):
-        from gui.theme_selector import ThemeSelectorDialog
-        dlg = ThemeSelectorDialog(self._current_theme, self._is_dark, self)
-        dlg.theme_selected.connect(self._on_theme_selected)
-        dlg.exec()
+    def _toggle_dark_mode(self):
+        old_skin = self.grab()
 
-    def _on_theme_selected(self, theme_name: str, is_dark: bool):
-        self._current_theme = theme_name
-        self._is_dark = is_dark
+        overlay = ThemeTransitionOverlay(self)
+        overlay.set_old_skin(old_skin)
+        overlay.repaint()
+
+        self._is_dark = not self._is_dark
         self._apply_theme()
-        self.log_message.emit(f"▶ 切换主题: {theme_name} ({'深色' if is_dark else '浅色'})")
+
+        anim = QPropertyAnimation(overlay.opacity_effect, b"opacity", self)
+        anim.setDuration(450)
+        anim.setEasingCurve(QEasingCurve.InOutQuad)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        anim.finished.connect(overlay.deleteLater)
+        anim.start()
+        self._theme_anim = anim
+
+        # Sync receiver window theme
+        if self._receiver_win and self._receiver_win.isVisible():
+            self._receiver_win.sync_theme(self._is_dark)
+
+        mode = "深色" if self._is_dark else "浅色"
+        self.log_message.emit(f"▶ 切换为{mode}模式")
 
     # ── Navigation ─────────────────────────────────────────────
 
@@ -336,8 +402,6 @@ class MainWindow(QMainWindow):
             self._stack.setCurrentIndex(0)
         elif key == "env":
             self._stack.setCurrentIndex(1)
-        elif key == "bench":
-            self._stack.setCurrentIndex(2)
 
     # ── Execute ────────────────────────────────────────────────
 
@@ -367,17 +431,31 @@ class MainWindow(QMainWindow):
         else:
             self.log_message.emit(f"▶ 启动演示: {cipher.upper()}-{mode.upper()}")
 
-        # Switch to timeline view
         self._on_nav("demo")
+
+        # Close previous receiver window if any
+        if self._receiver_win:
+            self._receiver_win.close()
+            self._receiver_win = None
 
         self._exec_worker = WorkflowWorker(path, cipher, mode, attack=attack)
         self._exec_worker.progress.connect(self.log_message.emit)
+        self._exec_worker.progress.connect(self._forward_receiver_log)
         self._exec_worker.step_data.connect(self._on_step_data)
+        self._exec_worker.sender_done.connect(self._on_sender_done)
         self._exec_worker.finished.connect(self._on_exec_done)
         self._exec_worker.error.connect(self._on_exec_error)
         self._exec_worker.start()
 
     def _on_step_data(self, data: dict):
+        target = data.get("target", "sender")
+
+        if target == "receiver":
+            if self._receiver_win:
+                self._receiver_win.on_step_data(data)
+            return
+
+        # Sender steps
         step = data["step"]
         title = data["title"]
         state = data["state"]
@@ -388,7 +466,6 @@ class MainWindow(QMainWindow):
         if state == "running":
             self.timeline.add_step(step, title, state="running", animate=True)
         elif step > current_count:
-            # New step that skipped "running" state (e.g. conclusion)
             card = self.timeline.add_step(step, title, data=kv, state=state, animate=True)
         else:
             self.timeline.update_last_card_state(state)
@@ -410,6 +487,20 @@ class MainWindow(QMainWindow):
         self.timeline.add_step(0, "执行错误", {"错误信息": msg}, state="error")
         self.log_message.emit(f"✗ 执行失败: {msg}")
 
+    def _on_sender_done(self):
+        """Sender steps complete — spawn receiver window."""
+        self._receiver_win = ReceiverWindow(is_dark=self._is_dark)
+        icon_path = self._resolve_asset("logo.ico")
+        if icon_path.exists():
+            self._receiver_win.setWindowIcon(QIcon(str(icon_path)))
+        self._receiver_win.show()
+        self.log_message.emit("\U0001f4e4 信封已发送 → 接收端窗口已打开")
+
+    def _forward_receiver_log(self, text: str):
+        """Forward receiver-related log messages to receiver window."""
+        if self._receiver_win and ("接收端" in text or "━━━" in text):
+            self._receiver_win.on_progress(text)
+
     # ── Log toggle ─────────────────────────────────────────────
 
     def _toggle_log(self):
@@ -427,6 +518,14 @@ class MainWindow(QMainWindow):
         if getattr(sys, 'frozen', False):
             return Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent)) / "plain.txt"
         return Path(__file__).resolve().parent.parent / "plain.txt"
+
+    @staticmethod
+    def _resolve_asset(filename: str) -> Path:
+        """Resolve a root-level asset path, supporting both dev and frozen modes."""
+        import sys
+        if getattr(sys, 'frozen', False):
+            return Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent)) / filename
+        return Path(__file__).resolve().parent.parent / filename
 
     def _browse_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "选择明文文件")
@@ -469,3 +568,8 @@ class MainWindow(QMainWindow):
     def mouseDoubleClickEvent(self, event):
         if event.position().y() < 44:
             self._toggle_maximize()
+
+    def closeEvent(self, event):
+        if self._receiver_win:
+            self._receiver_win.close()
+        super().closeEvent(event)
