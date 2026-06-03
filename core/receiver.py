@@ -9,7 +9,7 @@ from crypto.file_utils import ensure_output_dir, write_text
 from crypto.kdf_utils import derive_all
 from crypto.metadata_utils import decode_envelope, header_to_bytes, load_envelope
 from crypto.sm2_kex_or_wrap import unwrap_session_key
-from crypto.sm3_integrity import build_integrity_object, build_transcript, sm3_digest, verify_hmac_sm3
+from crypto.sm3_integrity import build_integrity_object, build_transcript, hmac_sm3, sm3_digest, verify_hmac_sm3
 from crypto.sm4_adapter import sm4_decrypt
 from crypto.zuc_adapter import zuc_decrypt
 from crypto.sm9_signature import verify as sm9_verify
@@ -54,32 +54,39 @@ def receive(
     transcript = build_transcript(header_bytes, wrapped_secret, nonce_or_iv, ct, auth_tag)
     sig_ok = sm9_verify(signature, transcript, sm9_master_pub, sender_id)
 
+    # Track claimed vs computed HMAC for comparison display
+    claimed_hmac = ""
+    computed_hmac = ""
+
     if cipher == "sm4" and mode == "gcm":
         integrity_ok = sig_ok
+        # GCM uses built-in AEAD tag, no separate HMAC
     elif cipher == "sm4":
-        integrity_ok = verify_hmac_sm3(
-            integ_key,
-            build_integrity_object(header_bytes, wrapped_secret, nonce_or_iv, ct),
-            auth_tag,
-        )
+        integrity_obj = build_integrity_object(header_bytes, wrapped_secret, nonce_or_iv, ct)
+        claimed_hmac = auth_tag.hex()
+        computed_hmac = hmac_sm3(integ_key, integrity_obj).hex()
+        integrity_ok = verify_hmac_sm3(integ_key, integrity_obj, auth_tag)
     elif cipher == "zuc":
-        integrity_ok = verify_hmac_sm3(
-            integ_key,
-            build_integrity_object(header_bytes, wrapped_secret, nonce_or_iv, ct),
-            auth_tag,
-        )
+        integrity_obj = build_integrity_object(header_bytes, wrapped_secret, nonce_or_iv, ct)
+        claimed_hmac = auth_tag.hex()
+        computed_hmac = hmac_sm3(integ_key, integrity_obj).hex()
+        integrity_ok = verify_hmac_sm3(integ_key, integrity_obj, auth_tag)
     else:
         raise ValueError(f"Unknown cipher: {cipher}")
 
     plaintext = b""
     digest_ok = False
+    claimed_digest = envelope["algo_meta"]["plain_digest_hex"]
+    computed_digest = ""
+
     if integrity_ok and sig_ok:
         try:
             if cipher == "sm4":
                 plaintext = sm4_decrypt(sm4_key, ct, mode=mode, iv=nonce_or_iv, tag=auth_tag if mode == "gcm" else None)
             else:
                 plaintext = zuc_decrypt(zuc_key, nonce_or_iv, ct)
-            digest_ok = sm3_digest(plaintext).hex() == envelope["algo_meta"]["plain_digest_hex"]
+            computed_digest = sm3_digest(plaintext).hex()
+            digest_ok = computed_digest == claimed_digest
             write_text(out / "recovered.txt", plaintext.decode("utf-8", errors="replace"))
         except Exception:
             integrity_ok = False
@@ -94,6 +101,10 @@ def receive(
         "digest_ok": digest_ok,
         "success": integrity_ok and sig_ok and digest_ok,
         "output_dir": str(out),
+        "claimed_hmac": claimed_hmac,
+        "computed_hmac": computed_hmac,
+        "claimed_digest": claimed_digest,
+        "computed_digest": computed_digest,
     }
 
     if result["success"]:
