@@ -30,15 +30,17 @@ class WorkflowWorker(QThread):
     """Runs the full send+receive workflow in a background thread.
 
     Signals:
-        progress(str)  — log text lines (for the log panel)
+        progress(str)   — log text lines (for the log panel)
         step_data(dict) — structured per-step data for the timeline cards:
-            {"step": int, "title": str, "state": str, "data": {k: v, ...}}
-        finished(dict) — final result {"send": ..., "receive": ...}
-        error(str)     — exception message
+            {"step": int, "title": str, "state": str, "target": str, "data": {k: v, ...}}
+        sender_done()   — emitted after sender steps complete (+ attack tamper)
+        finished(dict)  — final result {"send": ..., "receive": ...}
+        error(str)      — exception message
     """
 
     progress = Signal(str)
     step_data = Signal(dict)
+    sender_done = Signal()
     finished = Signal(dict)
     error = Signal(str)
 
@@ -66,34 +68,34 @@ class WorkflowWorker(QThread):
 
             out = ensure_output_dir(ARTIFACTS)
 
-            # Step 1: SM9 master key
+            # ─── Sender Step 1: SM9 master key ───
             self.step_data.emit({"step": 1, "title": "生成 SM9 主密钥对",
-                                 "state": "running", "data": {}})
-            self.progress.emit("▶ 步骤 1/6: 初始化 SM9 主密钥对")
+                                 "state": "running", "target": "sender", "data": {}})
+            self.progress.emit("▶ 发送端 1/3: 初始化 SM9 主密钥对")
             sm9_master, _ = generate_master_key()
             self.step_data.emit({"step": 1, "title": "生成 SM9 主密钥对",
-                                 "state": "success",
+                                 "state": "success", "target": "sender",
                                  "data": {"算法": "SM9 (GB/T 38635)",
                                           "用途": "身份签名 / 验签"}})
             self.progress.emit("  ✓ SM9 主密钥生成完成")
 
-            # Step 2: SM2 keypair
+            # ─── Sender Step 2: SM2 keypair ───
             self.step_data.emit({"step": 2, "title": "生成 SM2 接收方密钥对",
-                                 "state": "running", "data": {}})
-            self.progress.emit("▶ 步骤 2/6: 生成 SM2 接收方密钥对")
+                                 "state": "running", "target": "sender", "data": {}})
+            self.progress.emit("▶ 发送端 2/3: 生成 SM2 接收方密钥对")
             receiver_pri, receiver_pub = generate_sm2_keypair()
             save_key_hex(out / "receiver_pri.txt", receiver_pri)
             save_key_hex(out / "receiver_pub.txt", receiver_pub)
             self.step_data.emit({"step": 2, "title": "生成 SM2 接收方密钥对",
-                                 "state": "success",
+                                 "state": "success", "target": "sender",
                                  "data": {"公钥": receiver_pub[:48] + "...",
                                           "存储": str(out)}})
             self.progress.emit(f"  ✓ SM2 公钥: {receiver_pub[:32]}...")
 
-            # Step 3: Send (encrypt + sign + envelope)
-            self.step_data.emit({"step": 3, "title": "发送端 — 加密·签名·封装",
-                                 "state": "running", "data": {}})
-            self.progress.emit("▶ 步骤 3/6: 发送端 — 加密、签名、封装")
+            # ─── Sender Step 3: encrypt + sign + envelope ───
+            self.step_data.emit({"step": 3, "title": "加密·签名·封装",
+                                 "state": "running", "target": "sender", "data": {}})
+            self.progress.emit("▶ 发送端 3/3: 加密、签名、封装")
             send_result = send(
                 plaintext_path=self._path,
                 receiver_pub=receiver_pub,
@@ -104,8 +106,8 @@ class WorkflowWorker(QThread):
                 output_dir=out,
             )
             meta = send_result["meta"]
-            self.step_data.emit({"step": 3, "title": "发送端 — 加密·签名·封装",
-                                 "state": "success",
+            self.step_data.emit({"step": 3, "title": "加密·签名·封装",
+                                 "state": "success", "target": "sender",
                                  "data": {
                                      "加密算法": send_result["algo_label"],
                                      "明文摘要": send_result["plain_digest"][:32] + "...",
@@ -115,51 +117,102 @@ class WorkflowWorker(QThread):
                                  }})
             self.progress.emit(f"  ✓ 信封已写入: {out}/message.json")
 
-            # Optional attack simulation: tamper the on-disk envelope so the
-            # receiver's real cryptographic checks fail.
+            # Optional attack simulation
             if self._attack != "none":
                 self._tamper_envelope(out / "message.json")
 
-            # Step 4: Receive (unwrap + verify + decrypt)
-            self.step_data.emit({"step": 4, "title": "接收端 — 解封·验签·解密",
-                                 "state": "running", "data": {}})
-            self.progress.emit("▶ 步骤 4/6: 接收端 — 解封、验签、解密")
+            # Signal that sender phase is complete
+            self.sender_done.emit()
+
+            # ─── Receiver Step 1: load envelope + SM2 unwrap ───
+            self.step_data.emit({"step": 1, "title": "加载信封 · SM2 解封",
+                                 "state": "running", "target": "receiver", "data": {}})
+            self.progress.emit("▶ 接收端 1/5: 加载信封、SM2 解封会话秘密")
             recv_result = receive(
                 receiver_pri=receiver_pri,
                 receiver_pub=receiver_pub,
                 sm9_master_pub=sm9_master,
                 output_dir=out,
             )
-            self.step_data.emit({"step": 4, "title": "接收端 — 解封·验签·解密",
-                                 "state": "success",
+            self.step_data.emit({"step": 1, "title": "加载信封 · SM2 解封",
+                                 "state": "success", "target": "receiver",
                                  "data": {
-                                     "恢复明文": f"{recv_result['plaintext_len']} 字节",
                                      "算法": recv_result["algo_label"],
+                                     "会话秘密": "已恢复 (16 字节)",
                                  }})
-            self.progress.emit(f"  ✓ 解密完成: {recv_result['plaintext_len']} 字节")
+            self.progress.emit("  ✓ SM2 解封完成，会话秘密已恢复")
 
-            # Step 5: Verification results
-            self.step_data.emit({"step": 5, "title": "安全验证",
-                                 "state": "running", "data": {}})
-            self.progress.emit("▶ 步骤 5/6: 验证结果")
             sig_ok = recv_result["signature_ok"]
             int_ok = recv_result["integrity_ok"]
             dig_ok = recv_result["digest_ok"]
-            self.step_data.emit({"step": 5, "title": "安全验证",
-                                 "state": "success" if (sig_ok and int_ok and dig_ok) else "error",
-                                 "data": {
-                                     "SM9 签名验证": "✓ 通过" if sig_ok else "✗ 失败",
-                                     "完整性验证": "✓ 通过" if int_ok else "✗ 失败",
-                                     "摘要比对": "✓ 通过" if dig_ok else "✗ 失败",
-                                 }})
-            self.progress.emit(f"  签名: {'通过' if sig_ok else '失败'} | "
-                               f"完整性: {'通过' if int_ok else '失败'} | "
-                               f"摘要: {'通过' if dig_ok else '失败'}")
 
-            # Step 6: Conclusion
+            # ─── Receiver Step 2: SM9 signature verification ───
+            self.step_data.emit({"step": 2, "title": "SM9 签名验证",
+                                 "state": "running", "target": "receiver", "data": {}})
+            self.progress.emit("▶ 接收端 2/5: SM9 签名验证")
+            self.step_data.emit({"step": 2, "title": "SM9 签名验证",
+                                 "state": "success" if sig_ok else "error",
+                                 "target": "receiver",
+                                 "data": {
+                                     "SM9 签名验证": "✓ 通过 — 来源可信" if sig_ok
+                                                    else "✗ 失败 — 数据可能被篡改",
+                                 }})
+            self.progress.emit(f"  {'✓' if sig_ok else '✗'} SM9 签名: {'通过' if sig_ok else '失败'}")
+
+            # ─── Receiver Step 3: Integrity verification ───
+            is_gcm = (self._cipher == "sm4" and self._mode == "gcm")
+            integrity_title = "GCM 认证标签验证" if is_gcm else "HMAC 完整性验证"
+            self.step_data.emit({"step": 3, "title": integrity_title,
+                                 "state": "running", "target": "receiver", "data": {}})
+            self.progress.emit(f"▶ 接收端 3/5: {integrity_title}")
+
+            if is_gcm:
+                step3_data = {
+                    "GCM 认证": "✓ 通过" if int_ok else "✗ 失败",
+                }
+            else:
+                step3_data = {
+                    "_compare": True,
+                    "_compare_title": "HMAC-SM3 对比",
+                    "_claimed_label": "信封声称值",
+                    "_claimed_value": recv_result["claimed_hmac"],
+                    "_computed_label": "独立计算值",
+                    "_computed_value": recv_result["computed_hmac"],
+                    "_is_match": int_ok,
+                }
+
+            self.step_data.emit({"step": 3, "title": integrity_title,
+                                 "state": "success" if int_ok else "error",
+                                 "target": "receiver",
+                                 "data": step3_data})
+            self.progress.emit(f"  {'✓' if int_ok else '✗'} 完整性: {'通过' if int_ok else '失败'}")
+
+            # ─── Receiver Step 4: SM3 digest comparison ───
+            self.step_data.emit({"step": 4, "title": "SM3 摘要比对",
+                                 "state": "running", "target": "receiver", "data": {}})
+            self.progress.emit("▶ 接收端 4/5: SM3 明文摘要比对")
+            self.step_data.emit({"step": 4, "title": "SM3 摘要比对",
+                                 "state": "success" if dig_ok else "error",
+                                 "target": "receiver",
+                                 "data": {
+                                     "_compare": True,
+                                     "_compare_title": "SM3 明文摘要对比",
+                                     "_claimed_label": "信封声称值",
+                                     "_claimed_value": recv_result["claimed_digest"],
+                                     "_computed_label": "解密后计算",
+                                     "_computed_value": recv_result["computed_digest"] or "（解密失败，无法计算）",
+                                     "_is_match": dig_ok,
+                                 }})
+            self.progress.emit(f"  {'✓' if dig_ok else '✗'} 摘要比对: {'通过' if dig_ok else '失败'}")
+
+            # ─── Receiver Step 5: Final conclusion ───
             all_ok = recv_result["success"]
-            self.step_data.emit({"step": 6, "title": "最终结论",
+            self.step_data.emit({"step": 5, "title": "最终结论",
+                                 "state": "running", "target": "receiver", "data": {}})
+            self.progress.emit("▶ 接收端 5/5: 最终结论")
+            self.step_data.emit({"step": 5, "title": "最终结论",
                                  "state": "success" if all_ok else "error",
+                                 "target": "receiver",
                                  "data": {
                                      "结论": "全部验证通过 — 数据完整、来源可信" if all_ok
                                              else "验证失败 — 安全性无法保证",
