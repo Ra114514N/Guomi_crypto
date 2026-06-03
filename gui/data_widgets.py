@@ -48,7 +48,8 @@ class MetaCell(QWidget):
 
         self._key_label = QLabel(key)
         self._key_label.setStyleSheet(
-            f"color: #767C8D; font-size: 11px; font-weight: 400; "
+            f"color: {styles.text_muted}; font-size: {styles.font_size_label}px; "
+            f"font-weight: {styles.font_weight_label}; "
             f"background: transparent; font-family: {styles.current_font_family};"
         )
         layout.addWidget(self._key_label)
@@ -63,16 +64,16 @@ class MetaCell(QWidget):
                 f"border-radius: 4px;"
                 f"padding: 2px 8px;"
                 f"font-family: {styles.mono_font_family};"
-                f"font-size: 13px;"
-                f"font-weight: 500;"
+                f"font-size: {styles.font_size_mono}px;"
+                f"font-weight: {styles.font_weight_mono};"
             )
             self._value_label.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         else:
             self._value_label.setStyleSheet(
-                f"color: #FFFFFF;"
+                f"color: {styles.text_color};"
                 f"font-family: {styles.current_font_family};"
-                f"font-size: 14px;"
-                f"font-weight: 600;"
+                f"font-size: {styles.font_size_body}px;"
+                f"font-weight: {styles.font_weight_body};"
                 f"background: transparent;"
             )
         layout.addWidget(self._value_label, alignment=Qt.AlignLeft)
@@ -99,7 +100,8 @@ class LongDataRow(QWidget):
         self._key_label.setFixedWidth(86)
         self._key_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._key_label.setStyleSheet(
-            f"color: #767C8D; font-size: 11px; font-weight: 400; "
+            f"color: {styles.text_muted}; font-size: {styles.font_size_label}px; "
+            f"font-weight: {styles.font_weight_label}; "
             f"background: transparent; font-family: {styles.current_font_family};"
         )
         layout.addWidget(self._key_label)
@@ -117,8 +119,8 @@ class LongDataRow(QWidget):
             f"border-radius: 4px;"
             f"padding: 4px 10px;"
             f"font-family: {styles.mono_font_family};"
-            f"font-size: 13px;"
-            f"font-weight: 500;"
+            f"font-size: {styles.font_size_mono}px;"
+            f"font-weight: {styles.font_weight_mono};"
         )
         self._value_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self._value_label, 1)
@@ -212,34 +214,44 @@ class VerifyCapsule(QFrame):
 
     def _apply_style(self):
         if self._state == self.STATE_PASS:
-            bg = "rgba(16, 185, 129, 0.15)"
-            border = styles.success_color
-            text_color = styles.success_color
+            if styles.capsule_pass_bg:
+                bg = styles.capsule_pass_bg
+                border = styles.capsule_pass_border
+                text_color = styles.capsule_pass_text
+            else:
+                bg = "rgba(16, 185, 129, 0.15)"
+                border = styles.success_color
+                text_color = styles.success_color
             icon_text = "✓"
         elif self._state == self.STATE_FAIL:
-            bg = "rgba(239, 68, 68, 0.15)"
-            border = styles.error_color
-            text_color = styles.error_color
+            if styles.capsule_fail_bg:
+                bg = styles.capsule_fail_bg
+                border = styles.capsule_fail_border
+                text_color = styles.capsule_fail_text
+            else:
+                bg = "rgba(239, 68, 68, 0.15)"
+                border = styles.error_color
+                text_color = styles.error_color
             icon_text = "✗"
         else:
             bg = styles.mono_bg
             border = styles.card_border
-            text_color = "#767C8D"
+            text_color = styles.text_muted
             icon_text = "◯"
 
         self.setStyleSheet(
             f"QFrame#VerifyCapsule {{"
             f"  background-color: {bg};"
             f"  border: 1px solid {border};"
-            f"  border-radius: 8px;"
+            f"  border-radius: {styles.card_border_radius}px;"
             f"}}"
         )
         self._icon.setText(icon_text)
         self._icon.setStyleSheet(
-            f"color: {text_color}; font-size: 14px; font-weight: 700; background: transparent;"
+            f"color: {text_color}; font-size: {styles.font_size_body}px; font-weight: 700; background: transparent;"
         )
         self._text.setStyleSheet(
-            f"color: {text_color}; font-size: 13px; font-weight: 600; "
+            f"color: {text_color}; font-size: {styles.font_size_mono}px; font-weight: 600; "
             f"background: transparent; font-family: {styles.current_font_family};"
         )
 
@@ -299,8 +311,25 @@ class ConclusionBanner(QFrame):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
 
-        color = styles.success_color if ok else styles.error_color
-        bg = "rgba(16, 185, 129, 0.15)" if ok else "rgba(239, 68, 68, 0.15)"
+        if ok:
+            if styles.capsule_pass_bg:
+                bg = styles.capsule_pass_bg
+                border = styles.capsule_pass_border
+                color = styles.capsule_pass_text
+            else:
+                bg = "rgba(16, 185, 129, 0.15)"
+                border = styles.success_color
+                color = styles.success_color
+        else:
+            if styles.capsule_fail_bg:
+                bg = styles.capsule_fail_bg
+                border = styles.capsule_fail_border
+                color = styles.capsule_fail_text
+            else:
+                bg = "rgba(239, 68, 68, 0.15)"
+                border = styles.error_color
+                color = styles.error_color
+
         icon = "🛡️" if ok else "⚠️"
 
         icon_lbl = QLabel(icon)
@@ -310,7 +339,7 @@ class ConclusionBanner(QFrame):
         text_lbl = QLabel(text)
         text_lbl.setWordWrap(True)
         text_lbl.setStyleSheet(
-            f"color: {color}; font-size: 15px; font-weight: 700; "
+            f"color: {color}; font-size: {styles.font_size_body + 1}px; font-weight: 700; "
             f"background: transparent; font-family: {styles.current_font_family};"
         )
         layout.addWidget(text_lbl, 1)
@@ -318,7 +347,103 @@ class ConclusionBanner(QFrame):
         self.setStyleSheet(
             f"QFrame#ConclusionBanner {{"
             f"  background-color: {bg};"
-            f"  border: 1px solid {color};"
+            f"  border: 1px solid {border};"
+            f"  border-radius: {styles.card_border_radius}px;"
+            f"}}"
+        )
+
+
+class CompareBlock(QFrame):
+    """Framed container showing claimed vs computed values with match/mismatch badge.
+
+    Used in receiver verification steps to display HMAC or digest comparison.
+    """
+
+    def __init__(self, title: str, claimed_label: str, claimed_value: str,
+                 computed_label: str, computed_value: str, is_match: bool,
+                 max_chars: int = 40, parent=None):
+        super().__init__(parent)
+        self.setObjectName("CompareBlock")
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        # Determine colors based on match/mismatch
+        if is_match:
+            text_color = styles.capsule_pass_text if styles.capsule_pass_text else styles.success_color
+            badge_bg = styles.capsule_pass_bg if styles.capsule_pass_bg else "rgba(16, 185, 129, 0.1)"
+            badge_border = styles.capsule_pass_border if styles.capsule_pass_border else styles.success_color
+        else:
+            text_color = styles.capsule_fail_text if styles.capsule_fail_text else styles.error_color
+            badge_bg = styles.capsule_fail_bg if styles.capsule_fail_bg else "rgba(239, 68, 68, 0.08)"
+            badge_border = styles.capsule_fail_border if styles.capsule_fail_border else styles.error_color
+
+        # Frame styling
+        self.setStyleSheet(
+            f"QFrame#CompareBlock {{"
+            f"  background-color: {styles.mono_bg};"
+            f"  border: 1px solid {styles.card_border};"
             f"  border-radius: 8px;"
             f"}}"
         )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
+
+        # Section title
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
+            f"color: {styles.text_muted}; font-size: 11px; font-weight: 500; "
+            f"letter-spacing: 0.5px; background: transparent; "
+            f"font-family: {styles.current_font_family};"
+        )
+        layout.addWidget(title_lbl)
+
+        # Helper to build a value row
+        def _make_row(label_text: str, value_text: str) -> QWidget:
+            row = QWidget()
+            row.setStyleSheet("background: transparent;")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(8)
+
+            lbl = QLabel(label_text)
+            lbl.setFixedWidth(90)
+            lbl.setStyleSheet(
+                f"color: {styles.text_muted}; font-size: 12px; "
+                f"background: transparent; font-family: {styles.current_font_family};"
+            )
+            row_layout.addWidget(lbl)
+
+            # Truncate long values
+            display = value_text
+            if len(value_text) > max_chars:
+                display = value_text[:max_chars] + "..."
+
+            val_lbl = QLabel(display)
+            val_lbl.setStyleSheet(
+                f"color: {text_color}; font-size: 12px; "
+                f"font-family: {styles.mono_font_family}; background: transparent;"
+            )
+            if len(value_text) > max_chars:
+                val_lbl.setToolTip(value_text)
+            row_layout.addWidget(val_lbl, 1)
+
+            return row
+
+        # Claimed row
+        layout.addWidget(_make_row(claimed_label, claimed_value))
+        # Computed row
+        layout.addWidget(_make_row(computed_label, computed_value))
+
+        # Badge
+        badge_text = "匹配 ✓" if is_match else "不匹配 ✗"
+        badge = QLabel(badge_text)
+        badge.setAlignment(Qt.AlignCenter)
+        badge.setStyleSheet(
+            f"color: {text_color}; background-color: {badge_bg}; "
+            f"border: 1px solid {badge_border}; border-radius: 12px; "
+            f"padding: 4px 12px; font-size: 12px; font-weight: 600; "
+            f"font-family: {styles.current_font_family};"
+        )
+        badge.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        layout.addWidget(badge, 0, Qt.AlignLeft)
