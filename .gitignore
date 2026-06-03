@@ -15,3 +15,14 @@ venv/
 
 *.zip
 *.docx
+
+# PyInstaller
+build/
+dist/
+*.dll.debug.bak
+
+# IDE / tools
+.claude/
+
+# Unrelated projects
+LovelyMem_UI/
