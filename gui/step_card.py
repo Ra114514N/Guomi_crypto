@@ -3,10 +3,11 @@
 States: pending, running, success, error.
 Entrance animation: fade-in (geometry animation conflicts with layouts).
 
-Data layout is now smart-routed:
-- Step 5 (verification): three parallel capsule badges
-- Step 6 (conclusion): a banner
-- Other steps: short data → horizontal MetaCells, long data → LongDataRow
+Data layout is content-based routed:
+- _compare flag → CompareBlock
+- Single key with ✓/✗ prefix → single capsule badge
+- "结论" key → ConclusionBanner
+- Default: short data → horizontal MetaCells, long data → LongDataRow
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from gui import styles
 from gui.data_widgets import (
-    MetaCell, LongDataRow, VerifyCapsuleRow, ConclusionBanner,
+    MetaCell, LongDataRow, VerifyCapsuleRow, ConclusionBanner, CompareBlock,
 )
 
 
@@ -56,8 +57,11 @@ class StepCardWidget(QFrame):
     def _build_ui(self):
         self.setContentsMargins(0, 0, 0, 0)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
-        layout.setSpacing(12)
+        layout.setContentsMargins(
+            styles.card_padding, styles.card_padding - 2,
+            styles.card_padding, styles.card_padding - 2
+        )
+        layout.setSpacing(styles.card_spacing)
 
         # Header row: status icon + step title
         header = QHBoxLayout()
@@ -70,9 +74,11 @@ class StepCardWidget(QFrame):
         header.addWidget(self._status_label)
 
         self._title_label = QLabel(f"{self._step_number}. {self._title}")
-        self._title_label.setFont(QFont(styles.current_font_family, 12, QFont.Bold))
+        self._title_label.setFont(
+            QFont(styles.current_font_family, styles.font_size_title, QFont.Bold)
+        )
         self._title_label.setStyleSheet(
-            "color: #FFFFFF; background: transparent;"
+            f"color: {styles.text_color}; background: transparent;"
         )
         header.addWidget(self._title_label, 1)
 
@@ -97,7 +103,7 @@ class StepCardWidget(QFrame):
             f"QFrame#StepCard {{"
             f"  background-color: {styles.card_bg};"
             f"  border: 1px solid {border_color};"
-            f"  border-radius: 10px;"
+            f"  border-radius: {styles.card_border_radius}px;"
             f"}}"
         )
 
@@ -109,24 +115,33 @@ class StepCardWidget(QFrame):
         self._apply_card_border()
 
     def set_data_rows(self, data: dict[str, str], animate: bool = True) -> None:
-        """Smart-route data into appropriate widgets based on step + content."""
-        # Clear existing
+        """Content-based routing into appropriate widgets."""
+        self._last_data = data
         self._clear_data_layout()
 
         if not data:
             return
 
-        # Step 5: parallel verification capsules
-        if self._step_number == 5:
-            self._render_verification(data, animate=animate)
+        # 1. CompareBlock
+        if data.get("_compare"):
+            self._render_compare(data)
             return
 
-        # Step 6: conclusion banner
-        if self._step_number == 6:
+        # 2. Single capsule badge (one key, value starts with ✓ or ✗)
+        if len(data) == 1:
+            key, value = next(iter(data.items()))
+            if isinstance(value, str) and (value.startswith("✓") or value.startswith("✗")):
+                ok = value.startswith("✓")
+                from gui.data_widgets import VerifyCapsuleRow
+                self._data_layout.addWidget(VerifyCapsuleRow([(key, ok)], animate=animate))
+                return
+
+        # 3. Conclusion banner
+        if "结论" in data:
             self._render_conclusion(data)
             return
 
-        # Default: bucket short vs. long data
+        # 4. Default: bucket short vs long data
         short_items: list[tuple[str, str]] = []
         long_items: list[tuple[str, str]] = []
         for key, value in data.items():
@@ -136,7 +151,6 @@ class StepCardWidget(QFrame):
             else:
                 short_items.append((key, value))
 
-        # Short items: horizontal row of MetaCells
         if short_items:
             row = QHBoxLayout()
             row.setSpacing(28)
@@ -146,7 +160,6 @@ class StepCardWidget(QFrame):
             row.addStretch()
             self._data_layout.addLayout(row)
 
-        # Long items: each on its own LongDataRow
         for key, value in long_items:
             self._data_layout.addWidget(LongDataRow(key, value))
 
@@ -163,20 +176,31 @@ class StepCardWidget(QFrame):
 
     def refresh_styles(self) -> None:
         self._apply_card_border()
+        self._title_label.setFont(
+            QFont(styles.current_font_family, styles.font_size_title, QFont.Bold)
+        )
         self._title_label.setStyleSheet(
-            "color: #FFFFFF; background: transparent;"
+            f"color: {styles.text_color}; background: transparent;"
         )
         self._update_status_icon()
+        # Re-render data widgets with current theme colors
+        if hasattr(self, '_last_data') and self._last_data:
+            self.set_data_rows(self._last_data, animate=False)
 
     # ── Renderers ──────────────────────────────────────────────
 
-    def _render_verification(self, data: dict[str, str], animate: bool = True) -> None:
-        """Step 5 — three parallel capsules."""
-        items: list[tuple[str, bool]] = []
-        for key, value in data.items():
-            ok = ("✓" in str(value)) or ("通过" in str(value))
-            items.append((key, ok))
-        self._data_layout.addWidget(VerifyCapsuleRow(items, animate=animate))
+    def _render_compare(self, data: dict) -> None:
+        """Render a CompareBlock for side-by-side value comparison."""
+        from gui.data_widgets import CompareBlock
+        block = CompareBlock(
+            title=data["_compare_title"],
+            claimed_label=data["_claimed_label"],
+            claimed_value=data["_claimed_value"],
+            computed_label=data["_computed_label"],
+            computed_value=data["_computed_value"],
+            is_match=data["_is_match"],
+        )
+        self._data_layout.addWidget(block)
 
     def _render_conclusion(self, data: dict[str, str]) -> None:
         """Step 6 — banner with conclusion + supplementary info."""
@@ -222,7 +246,7 @@ class StepCardWidget(QFrame):
 
     def _update_status_icon(self):
         icons = {
-            self.STATE_PENDING: ("⏳", "#767C8D"),
+            self.STATE_PENDING: ("⏳", styles.text_muted),
             self.STATE_RUNNING: ("◉", styles.warning_color),
             self.STATE_SUCCESS: ("✓", styles.success_color),
             self.STATE_ERROR: ("✗", styles.error_color),
