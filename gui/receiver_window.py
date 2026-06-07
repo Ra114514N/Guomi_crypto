@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui import styles
+from gui.elided_label import ElidedLabel
 from gui.effects import add_drop_shadow
 from gui.frameless_resize import ResizeCursorFilter, cursor_shape_for_edges, edge_flags_at
 from gui.log_widget import LogWidget
@@ -102,7 +103,7 @@ class ReceiverWindow(QMainWindow):
         layout.setContentsMargins(16, 0, 10, 0)
         layout.setSpacing(12)
 
-        self.title_label = QLabel("\U0001F4E5 基于国密算法的安全数据传输与身份认证系统 — 接收端")
+        self.title_label = ElidedLabel("\U0001F4E5 基于国密算法的安全数据传输与身份认证系统 — 接收端")
         self.title_label.setObjectName("titleLabel")
         self.title_label.setFont(QFont(styles.current_font_family, 11, QFont.Bold))
         self.title_label.setMaximumWidth(520)

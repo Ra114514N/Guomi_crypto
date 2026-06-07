@@ -12,6 +12,8 @@ def test_gui_titles_use_full_project_name():
 
     assert f'{PROJECT_NAME} — 发送端' in main_source
     assert f'{PROJECT_NAME} — 接收端' in receiver_source
+    assert "ElidedLabel" in main_source
+    assert "ElidedLabel" in receiver_source
     assert f'setToolTip("{PROJECT_NAME} — 发送端")' in main_source
     assert f'setToolTip("{PROJECT_NAME} — 接收端")' in receiver_source
     assert "国密安全传输" not in main_source
