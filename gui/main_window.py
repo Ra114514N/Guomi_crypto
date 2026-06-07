@@ -97,7 +97,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(80, self._emit_welcome)
 
     def _emit_welcome(self):
-        self.log_message.emit("═══ 国密安全传输系统 ═══")
+        self.log_message.emit("═══ 基于国密算法的安全数据传输与身份认证系统 ═══")
         self.log_message.emit("▶ 系统就绪 — 选择算法后点击「启动演示」")
 
     # ── Build UI ───────────────────────────────────────────────
@@ -136,9 +136,11 @@ class MainWindow(QMainWindow):
         self._logo_label.setStyleSheet("background: transparent;")
         layout.addWidget(self._logo_label)
 
-        self.title_label = QLabel("\U0001f4e4 国密安全传输 — 发送端")
+        self.title_label = QLabel("\U0001f4e4 基于国密算法的安全数据传输与身份认证系统 — 发送端")
         self.title_label.setObjectName("titleLabel")
         self.title_label.setFont(QFont(styles.current_font_family, 11, QFont.Bold))
+        self.title_label.setMaximumWidth(210)
+        self.title_label.setToolTip("基于国密算法的安全数据传输与身份认证系统 — 发送端")
         layout.addWidget(self.title_label)
         layout.addStretch()
 

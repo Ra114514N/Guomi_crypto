@@ -2,7 +2,7 @@
 
 Layout:
 ┌─────────────────────────────────────────────────────────────┐
-│ 📥 国密安全传输 — 接收端               [◑] [—] [□] [×]     │  <- title bar 44px
+│ 📥 基于国密算法的安全数据传输与身份认证系统 — 接收端 [—][□][×] │  <- title bar 44px
 ├─────────────────────────────────────────────────┬───────────┤
 │  TimelineView (center, flex)                    │ >_ 日志   │
 │                                                 │  250px    │
@@ -70,7 +70,7 @@ class ReceiverWindow(QMainWindow):
         self.setMouseTracking(True)
         self.setMinimumSize(840, 680)
         self.resize(1080, 960)
-        self.setWindowTitle("国密安全传输 — 接收端")
+        self.setWindowTitle("基于国密算法的安全数据传输与身份认证系统 — 接收端")
 
         self._build_ui()
         self._resize_cursor_filter = ResizeCursorFilter(self, self._EDGE)
@@ -102,9 +102,11 @@ class ReceiverWindow(QMainWindow):
         layout.setContentsMargins(16, 0, 10, 0)
         layout.setSpacing(12)
 
-        self.title_label = QLabel("\U0001F4E5 国密安全传输 — 接收端")
+        self.title_label = QLabel("\U0001F4E5 基于国密算法的安全数据传输与身份认证系统 — 接收端")
         self.title_label.setObjectName("titleLabel")
         self.title_label.setFont(QFont(styles.current_font_family, 11, QFont.Bold))
+        self.title_label.setMaximumWidth(520)
+        self.title_label.setToolTip("基于国密算法的安全数据传输与身份认证系统 — 接收端")
         layout.addWidget(self.title_label)
         layout.addStretch()
 

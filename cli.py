@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""国密安全传输系统命令行入口。"""
+"""基于国密算法的安全数据传输与身份认证系统命令行入口。"""
 
 from __future__ import annotations
 

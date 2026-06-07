@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for 国密安全传输系统.
+"""PyInstaller spec for 基于国密算法的安全数据传输与身份认证系统.
 
 Build:
     pyinstaller build.spec --noconfirm
@@ -99,7 +99,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="国密安全传输系统",
+    name="基于国密算法的安全数据传输与身份认证系统",
     icon=str(ROOT / "logo.ico"),
     console=False,
     disable_windowed_traceback=False,

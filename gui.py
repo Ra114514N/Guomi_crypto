@@ -177,7 +177,7 @@ class BenchmarkTab(ttk.Frame):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("国密安全传输系统")
+        self.title("基于国密算法的安全数据传输与身份认证系统")
         self.geometry("900x650")
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True)
