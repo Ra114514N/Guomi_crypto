@@ -31,6 +31,9 @@ a = Analysis(
         (str(ROOT / "config"), "config"),
         # Default plaintext sample
         (str(ROOT / "plain.txt"), "."),
+        # Logo assets
+        (str(ROOT / "logo.png"), "."),
+        (str(ROOT / "logo.ico"), "."),
     ],
     hiddenimports=[
         # crypto layer
@@ -97,7 +100,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="国密安全传输系统",
-    icon=None,
+    icon=str(ROOT / "logo.ico"),
     console=False,
     disable_windowed_traceback=False,
 )

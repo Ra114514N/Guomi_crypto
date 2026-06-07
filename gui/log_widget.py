@@ -46,7 +46,7 @@ class LogWidget(QTextEdit):
         self.setUndoRedoEnabled(False)
         font = QFont("Consolas")
         font.setStyleHint(QFont.Monospace)
-        font.setPointSize(10)
+        font.setPixelSize(styles.font_size_log)
         self.setFont(font)
         self._show_timestamps = True
 
@@ -107,7 +107,7 @@ class LogWidget(QTextEdit):
 
         styles_map = {
             "section_major": (
-                f"color: #FFFFFF; font-weight: 700; letter-spacing: 0.5px;"
+                f"color: {styles.text_color}; font-weight: 700; letter-spacing: 0.5px;"
             ),
             "section": (
                 f"color: {styles.log_timestamp_color}; font-weight: 600;"

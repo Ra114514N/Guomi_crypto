@@ -219,24 +219,7 @@ class ThemeSelectorDialog(QDialog):
     def _on_dark_toggled(self, checked: bool):
         self._is_dark = checked
         self.theme_selected.emit(self._current_theme, self._is_dark)
-        # The theme has been swapped — refresh card swatches by rebuilding
-        # the UI on next open. We keep the dialog open so the user can pick
-        # another theme; rebuild the grid in place:
-        # (simplest approach: close + reopen would lose focus, so rebuild)
-        layout = self._container.layout()
-        while layout.count():
-            item = layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
-            else:
-                sub = item.layout()
-                if sub is not None:
-                    self._clear_layout(sub)
-        self._build_ui()
-        self.dark_check.blockSignals(True)
-        self.dark_check.setChecked(self._is_dark)
-        self.dark_check.blockSignals(False)
+        self.close()
 
     @staticmethod
     def _clear_layout(layout):

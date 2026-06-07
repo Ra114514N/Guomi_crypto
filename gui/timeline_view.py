@@ -20,10 +20,11 @@ from gui.step_card import StepCardWidget
 class TimelineView(QWidget):
     """A vertical scroll area that hosts StepCardWidgets with staggered entrance."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, auto_scroll: bool = True):
         super().__init__(parent)
         self._cards: list[StepCardWidget] = []
         self._entrance_delay_base = 80
+        self._auto_scroll = auto_scroll
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -85,8 +86,8 @@ class TimelineView(QWidget):
         if animate:
             card.animate_entrance(delay=self._entrance_delay_base)
 
-        # Auto-scroll to bottom
-        QTimer.singleShot(150, self._scroll_to_bottom)
+        if self._auto_scroll:
+            QTimer.singleShot(150, self._scroll_to_bottom)
         return card
 
     def update_last_card_state(self, state: str) -> None:

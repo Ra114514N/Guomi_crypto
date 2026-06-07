@@ -52,6 +52,28 @@ log_success_color = "#98C379"
 log_highlight_color = "#E5C07B"
 log_path_color = "#61AFEF"
 
+# Typography tokens (unified large font)
+font_size_title = 16
+font_size_body = 14
+font_size_mono = 13
+font_size_label = 12
+font_size_log = 12
+font_weight_title = 650
+font_weight_body = 500
+font_weight_mono = 600
+font_weight_label = 500
+card_padding = 24
+card_spacing = 14
+card_border_radius = 8
+
+# Capsule tokens (light-mode only, empty string means fallback to legacy)
+capsule_pass_bg = ""
+capsule_pass_border = ""
+capsule_pass_text = ""
+capsule_fail_bg = ""
+capsule_fail_border = ""
+capsule_fail_text = ""
+
 current_font_family = "'Microsoft YaHei UI', Inter, 'PingFang SC', system-ui, sans-serif"
 mono_font_family = "'JetBrains Mono', 'Fira Code', Consolas, monospace"
 
@@ -116,6 +138,12 @@ def apply_color_scheme(scheme_name: str, is_dark: bool) -> None:
     global card_bg, card_border, mono_bg
     global log_timestamp_color, log_info_color, log_success_color
     global log_highlight_color, log_path_color
+    global font_size_title, font_size_body, font_size_mono
+    global font_size_label, font_size_log
+    global font_weight_title, font_weight_body, font_weight_mono, font_weight_label
+    global card_padding, card_spacing, card_border_radius
+    global capsule_pass_bg, capsule_pass_border, capsule_pass_text
+    global capsule_fail_bg, capsule_fail_border, capsule_fail_text
 
     mode = "dark" if is_dark else "light"
     scheme = color_schemes.get(scheme_name, color_schemes["默认"])[mode]
@@ -158,6 +186,28 @@ def apply_color_scheme(scheme_name: str, is_dark: bool) -> None:
     log_success_color = _get("log_success_color", "#98C379")
     log_highlight_color = _get("log_highlight_color", "#E5C07B")
     log_path_color = _get("log_path_color", "#61AFEF")
+
+    # Typography tokens
+    font_size_title = _get("font_size_title", 16)
+    font_size_body = _get("font_size_body", 14)
+    font_size_mono = _get("font_size_mono", 13)
+    font_size_label = _get("font_size_label", 12)
+    font_size_log = _get("font_size_log", 12)
+    font_weight_title = _get("font_weight_title", 650)
+    font_weight_body = _get("font_weight_body", 500)
+    font_weight_mono = _get("font_weight_mono", 600)
+    font_weight_label = _get("font_weight_label", 500)
+    card_padding = _get("card_padding", 24)
+    card_spacing = _get("card_spacing", 14)
+    card_border_radius = _get("card_border_radius", 8)
+
+    # Capsule tokens (empty string = fallback to legacy behavior)
+    capsule_pass_bg = _get("capsule_pass_bg", "")
+    capsule_pass_border = _get("capsule_pass_border", "")
+    capsule_pass_text = _get("capsule_pass_text", "")
+    capsule_fail_bg = _get("capsule_fail_bg", "")
+    capsule_fail_border = _get("capsule_fail_border", "")
+    capsule_fail_text = _get("capsule_fail_text", "")
 
     update_styles()
 
@@ -469,7 +519,7 @@ def update_styles() -> None:
         QFrame#StepCard {{
             background-color: {card_bg};
             border: 1px solid {card_border};
-            border-radius: 8px;
+            border-radius: {card_border_radius}px;
         }}
         QFrame#StepCard[status="running"] {{
             border: 1px solid {warning_color};
@@ -483,14 +533,15 @@ def update_styles() -> None:
         QLabel#StepTitle {{
             color: {text_color};
             font-family: {current_font_family};
-            font-weight: bold;
-            font-size: 14px;
+            font-weight: {font_weight_title};
+            font-size: {font_size_title}px;
             background: transparent;
         }}
         QLabel#DataKey {{
             color: {text_muted};
             font-family: {current_font_family};
-            font-size: 12px;
+            font-size: {font_size_label}px;
+            font-weight: {font_weight_label};
             background: transparent;
         }}
         QLabel#DataValue {{
@@ -499,10 +550,11 @@ def update_styles() -> None:
             border-radius: 4px;
             padding: 3px 6px;
             font-family: {mono_font_family};
-            font-size: 12px;
+            font-size: {font_size_mono}px;
+            font-weight: {font_weight_mono};
         }}
         QLabel#StepStatus {{
-            font-size: 14px;
+            font-size: {font_size_title}px;
             background: transparent;
         }}
     """
@@ -529,12 +581,18 @@ def update_styles() -> None:
         }}
     """
 
+    # Determine if we're in a light theme by checking background luminance
+    _is_light = not background_color.startswith("rgba(13") and "#F" in background_color.upper()[:3] or background_color.startswith("#F")
+    _wc_text = "#6B7280" if _is_light else "#5A5E6C"
+    _wc_hover_bg = "rgba(0, 0, 0, 0.06)" if _is_light else "rgba(255, 255, 255, 0.08)"
+    _wc_pressed_bg = "rgba(0, 0, 0, 0.10)" if _is_light else "rgba(255, 255, 255, 0.12)"
+
     win_control_style = f"""
         QPushButton {{
             border: none;
             background-color: transparent;
             border-radius: 4px;
-            color: #5A5E6C;
+            color: {_wc_text};
             font-family: "Segoe UI Symbol", "Segoe UI", {current_font_family};
             font-size: 14px;
             font-weight: 400;
@@ -548,15 +606,15 @@ def update_styles() -> None:
         QPushButton#WinThemeButton:hover,
         QPushButton#WinMinButton:hover,
         QPushButton#WinMaxButton:hover {{
-            color: #FFFFFF;
-            background-color: rgba(255, 255, 255, 0.08);
+            color: {'#1F2937' if _is_light else '#FFFFFF'};
+            background-color: {_wc_hover_bg};
         }}
         QPushButton#WinCloseButton:hover {{
             color: #FFFFFF;
             background-color: #E81123;
         }}
         QPushButton:pressed {{
-            background-color: rgba(255, 255, 255, 0.12);
+            background-color: {_wc_pressed_bg};
         }}
         QPushButton#WinCloseButton:pressed {{
             background-color: #F1707A;

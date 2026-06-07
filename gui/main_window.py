@@ -11,7 +11,7 @@ Layout:
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QPoint, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, Signal, QPoint, QTimer, QPropertyAnimation, QEasingCurve, QRect
 from PySide6.QtGui import QFont, QIcon, QPixmap, QPainter
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from gui import styles
 from gui.effects import add_drop_shadow, BusyDot, StatusIndicator
+from gui.frameless_resize import ResizeCursorFilter, cursor_shape_for_edges, edge_flags_at
 from gui.log_widget import LogWidget
 from gui.timeline_view import TimelineView
 from gui.tabs.env_tab import EnvTab
@@ -78,10 +79,13 @@ class MainWindow(QMainWindow):
 
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setMouseTracking(True)
         self.setMinimumSize(1060, 680)
         self.resize(1220, 780)
 
         self._build_ui()
+        self._resize_cursor_filter = ResizeCursorFilter(self, self._EDGE)
+        self._resize_cursor_filter.install_recursively(self)
         self._apply_theme()
         self.log_message.connect(self._append_log)
 
@@ -100,6 +104,7 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self):
         central = QWidget(objectName="central")
+        central.setMouseTracking(True)
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
@@ -145,6 +150,7 @@ class MainWindow(QMainWindow):
         self.algo_combo = QComboBox()
         self.algo_combo.addItems(["zuc", "sm4-gcm", "sm4-cbc", "sm4-ctr"])
         self.algo_combo.setFixedWidth(110)
+        self._fix_combo_popup(self.algo_combo)
         layout.addWidget(self.algo_combo)
 
         # Attack simulation selector — tampers the envelope before receiving
@@ -160,6 +166,7 @@ class MainWindow(QMainWindow):
         self.attack_combo.addItem("伪造 SM9 签名", "signature")
         self.attack_combo.setFixedWidth(130)
         self.attack_combo.setToolTip("攻击模拟：发送后、接收前篡改信封，触发真实校验失败")
+        self._fix_combo_popup(self.attack_combo)
         layout.addWidget(self.attack_combo)
 
         # File picker (compact)
@@ -171,9 +178,10 @@ class MainWindow(QMainWindow):
         self.file_edit.setFixedWidth(180)
         self.file_edit.setPlaceholderText("明文文件路径")
         layout.addWidget(self.file_edit)
-        browse_btn = QPushButton("…")
-        browse_btn.setFixedSize(28, 28)
+        browse_btn = QPushButton("📂 选择")
+        browse_btn.setFixedSize(72, 30)
         browse_btn.setCursor(Qt.PointingHandCursor)
+        browse_btn.setToolTip("选择明文文件")
         browse_btn.clicked.connect(self._browse_file)
         layout.addWidget(browse_btn)
 
@@ -239,7 +247,6 @@ class MainWindow(QMainWindow):
         self._nav_buttons = {}
         nav_items = [
             ("demo", "◈\n演示"),
-            ("send_recv", "◈\n收发"),
             ("env", "◈\n环境"),
         ]
         for key, label in nav_items:
@@ -300,8 +307,9 @@ class MainWindow(QMainWindow):
         header.addWidget(lbl)
         header.addStretch()
         clear_btn = QPushButton("清空")
-        clear_btn.setFixedHeight(22)
+        clear_btn.setFixedSize(58, 28)
         clear_btn.setCursor(Qt.PointingHandCursor)
+        clear_btn.setToolTip("清空日志")
         clear_btn.clicked.connect(self._on_clear_log)
         header.addWidget(clear_btn)
         log_layout.addLayout(header)
@@ -398,7 +406,7 @@ class MainWindow(QMainWindow):
             btn.setChecked(k == key)
         self._current_nav = key
 
-        if key == "demo" or key == "send_recv":
+        if key == "demo":
             self._stack.setCurrentIndex(0)
         elif key == "env":
             self._stack.setCurrentIndex(1)
@@ -493,7 +501,7 @@ class MainWindow(QMainWindow):
         icon_path = self._resolve_asset("logo.ico")
         if icon_path.exists():
             self._receiver_win.setWindowIcon(QIcon(str(icon_path)))
-        self._receiver_win.show()
+        self._receiver_win.present_from_sender(self.geometry())
         self.log_message.emit("\U0001f4e4 信封已发送 → 接收端窗口已打开")
 
     def _forward_receiver_log(self, text: str):
@@ -533,6 +541,19 @@ class MainWindow(QMainWindow):
             self.file_edit.setText(path)
             self.log_message.emit(f"▶ 选择文件: {path}")
 
+    @staticmethod
+    def _fix_combo_popup(combo: QComboBox):
+        """Fix QComboBox popup z-order on frameless translucent windows (Windows)."""
+        original_show = combo.showPopup
+
+        def patched_show():
+            original_show()
+            popup = combo.view().window()
+            popup.raise_()
+            popup.activateWindow()
+
+        combo.showPopup = patched_show
+
     def _win_control_button(self, glyph: str, object_name: str) -> QPushButton:
         btn = QPushButton(glyph)
         btn.setObjectName(object_name)
@@ -549,21 +570,77 @@ class MainWindow(QMainWindow):
     def _append_log(self, text: str):
         self.log_output.append_message(text)
 
-    # ── Frameless Drag ─────────────────────────────────────────
+    # ── Frameless Drag & Resize ─────────────────────────────────
+
+    _EDGE = 12
+
+    def _edge_at(self, pos):
+        """Return edge flags (combination of left/right/top/bottom) for a position."""
+        return edge_flags_at(pos, self.size(), self._EDGE)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and event.position().y() < 44:
+        if event.button() != Qt.LeftButton:
+            return
+        pos = event.position().toPoint()
+        left, right, top, bottom = self._edge_at(pos)
+        if left or right or top or bottom:
+            self._resize_edge = (left, right, top, bottom)
+            self._resize_start_geo = self.geometry()
+            self._resize_start_pos = event.globalPosition().toPoint()
+        elif pos.y() < 44:
+            self._resize_edge = None
             self._drag_pos = (event.globalPosition().toPoint()
                               - self.frameGeometry().topLeft())
-            event.accept()
+        else:
+            self._resize_edge = None
+        event.accept()
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.LeftButton and not self._drag_pos.isNull():
-            self.move(event.globalPosition().toPoint() - self._drag_pos)
-            event.accept()
+        if event.buttons() & Qt.LeftButton:
+            if getattr(self, '_resize_edge', None):
+                self._do_resize(event.globalPosition().toPoint())
+                event.accept()
+                return
+            if not self._drag_pos.isNull():
+                self.move(event.globalPosition().toPoint() - self._drag_pos)
+                event.accept()
+                return
+        else:
+            # Hover: set cursor shape based on edge
+            pos = event.position().toPoint()
+            self.setCursor(cursor_shape_for_edges(self._edge_at(pos)))
+
+    def _do_resize(self, global_pos):
+        left, right, top, bottom = self._resize_edge
+        geo = QRect(self._resize_start_geo)
+        delta = global_pos - self._resize_start_pos
+        min_w, min_h = self.minimumWidth(), self.minimumHeight()
+
+        if right:
+            geo.setRight(geo.right() + delta.x())
+        if bottom:
+            geo.setBottom(geo.bottom() + delta.y())
+        if left:
+            geo.setLeft(geo.left() + delta.x())
+        if top:
+            geo.setTop(geo.top() + delta.y())
+
+        if geo.width() < min_w:
+            if left:
+                geo.setLeft(geo.right() - min_w)
+            else:
+                geo.setRight(geo.left() + min_w)
+        if geo.height() < min_h:
+            if top:
+                geo.setTop(geo.bottom() - min_h)
+            else:
+                geo.setBottom(geo.top() + min_h)
+
+        self.setGeometry(geo)
 
     def mouseReleaseEvent(self, event):
         self._drag_pos = QPoint()
+        self._resize_edge = None
 
     def mouseDoubleClickEvent(self, event):
         if event.position().y() < 44:

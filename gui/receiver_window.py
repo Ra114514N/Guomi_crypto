@@ -9,7 +9,7 @@ Layout:
 └─────────────────────────────────────────────────┴───────────┘
 """
 
-from PySide6.QtCore import Qt, QPoint, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QPoint, QRect, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup
 from PySide6.QtGui import QFont, QPixmap, QPainter
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from gui import styles
 from gui.effects import add_drop_shadow
+from gui.frameless_resize import ResizeCursorFilter, cursor_shape_for_edges, edge_flags_at
 from gui.log_widget import LogWidget
 from gui.timeline_view import TimelineView
 
@@ -66,17 +67,21 @@ class ReceiverWindow(QMainWindow):
 
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(620, 520)
-        self.resize(680, 620)
+        self.setMouseTracking(True)
+        self.setMinimumSize(840, 680)
+        self.resize(1080, 960)
         self.setWindowTitle("国密安全传输 — 接收端")
 
         self._build_ui()
+        self._resize_cursor_filter = ResizeCursorFilter(self, self._EDGE)
+        self._resize_cursor_filter.install_recursively(self)
         self._apply_theme()
 
     # ── Build UI ───────────────────────────────────────────────
 
     def _build_ui(self):
         central = QWidget(objectName="central")
+        central.setMouseTracking(True)
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
@@ -130,7 +135,7 @@ class ReceiverWindow(QMainWindow):
         body_layout.setSpacing(0)
 
         # Center: timeline
-        self.timeline = TimelineView()
+        self.timeline = TimelineView(auto_scroll=False)
         body_layout.addWidget(self.timeline, 1)
 
         # Right: log panel
@@ -142,7 +147,7 @@ class ReceiverWindow(QMainWindow):
 
     def _build_log_panel(self, parent_layout: QHBoxLayout):
         self._log_frame = QFrame(objectName="logPanel")
-        self._log_frame.setFixedWidth(250)
+        self._log_frame.setFixedWidth(300)
         log_layout = QVBoxLayout(self._log_frame)
         log_layout.setContentsMargins(0, 8, 8, 8)
         log_layout.setSpacing(4)
@@ -235,6 +240,58 @@ class ReceiverWindow(QMainWindow):
         """Append log message."""
         self.log_output.append_message(text)
 
+    def present_from_sender(self, sender_geometry: QRect):
+        """Show near the sender window with a short slide/fade transition."""
+        target = self._target_geometry_near(sender_geometry)
+        start_pos = QPoint(target.x() + 36, target.y())
+
+        self.resize(target.size())
+        self.setWindowOpacity(0.0)
+        self.move(start_pos)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+        fade = QPropertyAnimation(self, b"windowOpacity", self)
+        fade.setDuration(220)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QEasingCurve.OutCubic)
+
+        slide = QPropertyAnimation(self, b"pos", self)
+        slide.setDuration(260)
+        slide.setStartValue(start_pos)
+        slide.setEndValue(target.topLeft())
+        slide.setEasingCurve(QEasingCurve.OutCubic)
+
+        group = QParallelAnimationGroup(self)
+        group.addAnimation(fade)
+        group.addAnimation(slide)
+        group.finished.connect(lambda: self.setWindowOpacity(1.0))
+        group.start(QPropertyAnimation.DeleteWhenStopped)
+        self._present_anim = group
+
+    def _target_geometry_near(self, sender_geometry: QRect) -> QRect:
+        screen = self.screen()
+        available = screen.availableGeometry() if screen else sender_geometry
+        margin = 18
+        width = min(max(self.width(), self.minimumWidth()), available.width() - margin * 2)
+        height = min(max(self.height(), self.minimumHeight()), available.height() - margin * 2)
+
+        x = sender_geometry.right() + margin
+        if x + width > available.right():
+            x = sender_geometry.left() + 180
+        if x < available.left() + margin:
+            x = available.left() + margin
+        if x + width > available.right() - margin:
+            x = available.right() - width - margin
+
+        y = sender_geometry.top() + 64
+        if y + height > available.bottom():
+            y = available.bottom() - height - margin
+        y = max(available.top() + margin, y)
+        return QRect(x, y, width, height)
+
     # ── Helpers ────────────────────────────────────────────────
 
     def _win_control_button(self, glyph: str, object_name: str) -> QPushButton:
@@ -250,21 +307,75 @@ class ReceiverWindow(QMainWindow):
         else:
             self.showMaximized()
 
-    # ── Frameless Drag ─────────────────────────────────────────
+    # ── Frameless Drag & Resize ─────────────────────────────────
+
+    _EDGE = 12
+
+    def _edge_at(self, pos):
+        return edge_flags_at(pos, self.size(), self._EDGE)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and event.position().y() < 44:
+        if event.button() != Qt.LeftButton:
+            return
+        pos = event.position().toPoint()
+        left, right, top, bottom = self._edge_at(pos)
+        if left or right or top or bottom:
+            self._resize_edge = (left, right, top, bottom)
+            self._resize_start_geo = self.geometry()
+            self._resize_start_pos = event.globalPosition().toPoint()
+        elif pos.y() < 44:
+            self._resize_edge = None
             self._drag_pos = (event.globalPosition().toPoint()
                               - self.frameGeometry().topLeft())
-            event.accept()
+        else:
+            self._resize_edge = None
+        event.accept()
 
     def mouseMoveEvent(self, event):
-        if event.buttons() & Qt.LeftButton and not self._drag_pos.isNull():
-            self.move(event.globalPosition().toPoint() - self._drag_pos)
-            event.accept()
+        if event.buttons() & Qt.LeftButton:
+            if getattr(self, '_resize_edge', None):
+                self._do_resize(event.globalPosition().toPoint())
+                event.accept()
+                return
+            if self._drag_pos and not self._drag_pos.isNull():
+                self.move(event.globalPosition().toPoint() - self._drag_pos)
+                event.accept()
+                return
+        else:
+            pos = event.position().toPoint()
+            self.setCursor(cursor_shape_for_edges(self._edge_at(pos)))
+
+    def _do_resize(self, global_pos):
+        left, right, top, bottom = self._resize_edge
+        geo = QRect(self._resize_start_geo)
+        delta = global_pos - self._resize_start_pos
+        min_w, min_h = self.minimumWidth(), self.minimumHeight()
+
+        if right:
+            geo.setRight(geo.right() + delta.x())
+        if bottom:
+            geo.setBottom(geo.bottom() + delta.y())
+        if left:
+            geo.setLeft(geo.left() + delta.x())
+        if top:
+            geo.setTop(geo.top() + delta.y())
+
+        if geo.width() < min_w:
+            if left:
+                geo.setLeft(geo.right() - min_w)
+            else:
+                geo.setRight(geo.left() + min_w)
+        if geo.height() < min_h:
+            if top:
+                geo.setTop(geo.bottom() - min_h)
+            else:
+                geo.setBottom(geo.top() + min_h)
+
+        self.setGeometry(geo)
 
     def mouseReleaseEvent(self, event):
         self._drag_pos = QPoint()
+        self._resize_edge = None
 
     def mouseDoubleClickEvent(self, event):
         if event.position().y() < 44:
