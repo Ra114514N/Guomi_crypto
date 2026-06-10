@@ -16,6 +16,7 @@ ROOT = Path(SPECPATH)
 
 # gmssl.py (the gmssl-python 2.2.2 single-file native binding module)
 _GMSSL_PY = Path(sys.prefix) / "Lib" / "site-packages" / "gmssl.py"
+_SHIBOKEN_DLL = Path(sys.prefix) / "Lib" / "site-packages" / "shiboken6" / "shiboken6.abi3.dll"
 
 a = Analysis(
     [str(ROOT / "gui" / "run.py")],
@@ -23,6 +24,9 @@ a = Analysis(
     binaries=[
         # Release-compiled GmSSL native library
         (str(ROOT / "gmssl_release.dll"), "."),
+        # PySide6 extension modules load this DLL while importing QtWidgets.
+        # Keep the normal shiboken6 copy and add a compatibility copy next to PySide6/*.pyd.
+        (str(_SHIBOKEN_DLL), "PySide6"),
     ],
     datas=[
         # gmssl.py module (loaded dynamically by gmssl_loader.py)
@@ -69,6 +73,9 @@ a = Analysis(
         "gui.theme_selector",
         "gui.workers",
         "gui.main_window",
+        "gui.receiver_window",
+        "gui.elided_label",
+        "gui.frameless_resize",
         "gui.tabs",
         "gui.tabs.env_tab",
         "gui.tabs.demo_tab",
