@@ -110,6 +110,7 @@ class WorkflowWorker(QThread):
                                  "state": "success", "target": "sender",
                                  "data": {
                                      "加密算法": send_result["algo_label"],
+                                     "文件名": send_result["filename"],
                                      "明文摘要": send_result["plain_digest"][:32] + "...",
                                      "密文长度": f"{meta['algo_meta']['ciphertext_len']} 字节",
                                      "认证标签": meta["auth_tag_b64"][:32] + "...",
@@ -127,7 +128,7 @@ class WorkflowWorker(QThread):
             # ─── Receiver Step 1: load envelope + SM2 unwrap ───
             self.step_data.emit({"step": 1, "title": "加载信封 · SM2 解封",
                                  "state": "running", "target": "receiver", "data": {}})
-            self.progress.emit("▶ 接收端 1/5: 加载信封、SM2 解封会话秘密")
+            self.progress.emit("▶ 接收端 1/6: 加载信封、SM2 解封会话秘密")
             recv_result = receive(
                 receiver_pri=receiver_pri,
                 receiver_pub=receiver_pub,
@@ -149,7 +150,7 @@ class WorkflowWorker(QThread):
             # ─── Receiver Step 2: SM9 signature verification ───
             self.step_data.emit({"step": 2, "title": "SM9 签名验证",
                                  "state": "running", "target": "receiver", "data": {}})
-            self.progress.emit("▶ 接收端 2/5: SM9 签名验证")
+            self.progress.emit("▶ 接收端 2/6: SM9 签名验证")
             self.step_data.emit({"step": 2, "title": "SM9 签名验证",
                                  "state": "success" if sig_ok else "error",
                                  "target": "receiver",
@@ -164,7 +165,7 @@ class WorkflowWorker(QThread):
             integrity_title = "GCM 认证标签验证" if is_gcm else "HMAC 完整性验证"
             self.step_data.emit({"step": 3, "title": integrity_title,
                                  "state": "running", "target": "receiver", "data": {}})
-            self.progress.emit(f"▶ 接收端 3/5: {integrity_title}")
+            self.progress.emit(f"▶ 接收端 3/6: {integrity_title}")
 
             if is_gcm:
                 step3_data = {
@@ -190,7 +191,7 @@ class WorkflowWorker(QThread):
             # ─── Receiver Step 4: SM3 digest comparison ───
             self.step_data.emit({"step": 4, "title": "SM3 摘要比对",
                                  "state": "running", "target": "receiver", "data": {}})
-            self.progress.emit("▶ 接收端 4/5: SM3 明文摘要比对")
+            self.progress.emit("▶ 接收端 4/6: SM3 明文摘要比对")
             self.step_data.emit({"step": 4, "title": "SM3 摘要比对",
                                  "state": "success" if dig_ok else "error",
                                  "target": "receiver",
@@ -205,18 +206,47 @@ class WorkflowWorker(QThread):
                                  }})
             self.progress.emit(f"  {'✓' if dig_ok else '✗'} 摘要比对: {'通过' if dig_ok else '失败'}")
 
-            # ─── Receiver Step 5: Final conclusion ───
-            all_ok = recv_result["success"]
-            self.step_data.emit({"step": 5, "title": "最终结论",
+            # ─── Receiver Step 5: File type identification ───
+            type_ok = recv_result["type_match"]
+            self.step_data.emit({"step": 5, "title": "文件类型识别",
                                  "state": "running", "target": "receiver", "data": {}})
-            self.progress.emit("▶ 接收端 5/5: 最终结论")
-            self.step_data.emit({"step": 5, "title": "最终结论",
+            self.progress.emit("▶ 接收端 5/6: 文件类型识别")
+            if recv_result["decrypt_ok"]:
+                step5_data = {
+                    "_compare": True,
+                    "_compare_title": "文件类型对比",
+                    "_claimed_label": "信封声称类型",
+                    "_claimed_value": recv_result["claimed_type"],
+                    "_computed_label": "内容检测类型",
+                    "_computed_value": recv_result["detected_type"],
+                    "_is_match": type_ok,
+                }
+                step5_state = "success" if type_ok else "error"
+                self.progress.emit(
+                    f"  {'✓' if type_ok else '✗'} 文件类型: "
+                    f"声称 {recv_result['claimed_type']} / 检测 {recv_result['detected_type']}"
+                    f" — {'一致' if type_ok else '不一致'}")
+            else:
+                step5_data = {"文件类型识别": "✗ 解密失败，无法识别"}
+                step5_state = "error"
+                self.progress.emit("  ✗ 文件类型: 解密失败，无法识别")
+            self.step_data.emit({"step": 5, "title": "文件类型识别",
+                                 "state": step5_state,
+                                 "target": "receiver",
+                                 "data": step5_data})
+
+            # ─── Receiver Step 6: Final conclusion ───
+            all_ok = recv_result["success"]
+            self.step_data.emit({"step": 6, "title": "最终结论",
+                                 "state": "running", "target": "receiver", "data": {}})
+            self.progress.emit("▶ 接收端 6/6: 最终结论")
+            self.step_data.emit({"step": 6, "title": "最终结论",
                                  "state": "success" if all_ok else "error",
                                  "target": "receiver",
                                  "data": {
                                      "结论": "全部验证通过 — 数据完整、来源可信" if all_ok
                                              else "验证失败 — 安全性无法保证",
-                                     "输出": f"{out}/recovered.txt" if all_ok else "—",
+                                     "输出": recv_result["recovered_path"] if all_ok else "—",
                                  }})
             self.progress.emit("✓ 流程完成" if all_ok else "✗ 验证失败")
 
@@ -242,6 +272,7 @@ class WorkflowWorker(QThread):
             "ciphertext": "篡改密文",
             "nonce": "篡改 IV/Nonce",
             "receiver_id": "伪造接收方 ID",
+            "filename": "篡改文件名",
             "signature": "伪造 SM9 签名",
         }
         self.progress.emit(f"⚠ 攻击模拟: {labels.get(self._attack, self._attack)} — 正在篡改信封")
@@ -252,6 +283,8 @@ class WorkflowWorker(QThread):
             envelope["nonce_or_iv_b64"] = self._flip_b64(envelope["nonce_or_iv_b64"])
         elif self._attack == "receiver_id":
             envelope["header"]["receiver_id"] = "attacker@evil.local"
+        elif self._attack == "filename":
+            envelope["header"]["filename"] = "evil.exe"
         elif self._attack == "signature":
             envelope["signature_b64"] = self._flip_b64(envelope["signature_b64"])
 

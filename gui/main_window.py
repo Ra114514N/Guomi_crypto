@@ -166,6 +166,7 @@ class MainWindow(QMainWindow):
         self.attack_combo.addItem("篡改密文", "ciphertext")
         self.attack_combo.addItem("篡改 IV/Nonce", "nonce")
         self.attack_combo.addItem("伪造接收方 ID", "receiver_id")
+        self.attack_combo.addItem("篡改文件名", "filename")
         self.attack_combo.addItem("伪造 SM9 签名", "signature")
         self.attack_combo.setFixedWidth(130)
         self.attack_combo.setToolTip("攻击模拟：发送后、接收前篡改信封，触发真实校验失败")
@@ -305,7 +306,7 @@ class MainWindow(QMainWindow):
         header.setContentsMargins(10, 0, 4, 0)
         lbl = QLabel(">_ 日志")
         lbl.setStyleSheet(
-            f"color: {styles.text_muted}; font-size: 11px; font-weight: 600; background: transparent;"
+            f"color: {styles.text_muted}; font-size: {styles.font_size_label - 1}px; font-weight: 600; background: transparent;"
         )
         header.addWidget(lbl)
         header.addStretch()
