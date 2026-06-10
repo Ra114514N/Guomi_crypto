@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from crypto.file_utils import ensure_output_dir, write_text
+from crypto.file_utils import ensure_output_dir, write_bytes
+from crypto.filetype_sniffer import check_consistency
 from crypto.kdf_utils import derive_all
 from crypto.metadata_utils import decode_envelope, header_to_bytes, load_envelope
 from crypto.sm2_kex_or_wrap import unwrap_session_key
@@ -76,8 +77,14 @@ def receive(
 
     plaintext = b""
     digest_ok = False
+    decrypt_ok = False
     claimed_digest = envelope["algo_meta"]["plain_digest_hex"]
     computed_digest = ""
+    filename = header.get("filename", "")
+    recovered_path = ""
+    claimed_type = ""
+    detected_type = ""
+    type_match = False
 
     if integrity_ok and sig_ok:
         try:
@@ -85,26 +92,37 @@ def receive(
                 plaintext = sm4_decrypt(sm4_key, ct, mode=mode, iv=nonce_or_iv, tag=auth_tag if mode == "gcm" else None)
             else:
                 plaintext = zuc_decrypt(zuc_key, nonce_or_iv, ct)
+        except Exception:
+            log.warning("[receiver] decryption failed", exc_info=True)
+        else:
+            decrypt_ok = True
             computed_digest = sm3_digest(plaintext).hex()
             digest_ok = computed_digest == claimed_digest
-            write_text(out / "recovered.txt", plaintext.decode("utf-8", errors="replace"))
-        except Exception:
-            integrity_ok = False
+            recovered_name = ("recovered" + Path(filename).suffix) if filename else "recovered.bin"
+            write_bytes(out / recovered_name, plaintext)
+            recovered_path = str(out / recovered_name)
+            claimed_type, detected_type, type_match = check_consistency(filename, plaintext)
 
     result = {
         "algo_label": envelope["algo_meta"]["algo"],
         "sender_id": sender_id,
         "receiver_id": receiver_id,
+        "filename": filename,
+        "recovered_path": recovered_path,
         "plaintext_len": len(plaintext),
         "integrity_ok": integrity_ok,
         "signature_ok": sig_ok,
         "digest_ok": digest_ok,
+        "decrypt_ok": decrypt_ok,
         "success": integrity_ok and sig_ok and digest_ok,
         "output_dir": str(out),
         "claimed_hmac": claimed_hmac,
         "computed_hmac": computed_hmac,
         "claimed_digest": claimed_digest,
         "computed_digest": computed_digest,
+        "claimed_type": claimed_type,
+        "detected_type": detected_type,
+        "type_match": type_match,
     }
 
     if result["success"]:

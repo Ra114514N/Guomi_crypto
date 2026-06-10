@@ -42,13 +42,9 @@ def _cbc_encrypt(key: bytes, plaintext: bytes, iv: bytes) -> bytes:
 def _cbc_decrypt(key: bytes, ciphertext: bytes, iv: bytes) -> bytes:
     alg = _gm_sm4.CryptSM4()
     alg.set_key(key, _gm_sm4.SM4_DECRYPT)
-    raw = alg.crypt_cbc(input_data=ciphertext, iv=iv)
-    # gmssl 的 pkcs7_unpadding 实现有 bug，手动去除 PKCS7 填充
-    if raw and 1 <= raw[-1] <= 16:
-        pad = raw[-1]
-        if raw[-pad:] == bytes([pad] * pad):
-            return raw[:-pad]
-    return raw
+    # gmssl 的 crypt_cbc 解密内部已做 pkcs7_unpadding，不可再二次去填充：
+    # 二次去填充会把恰好以「疑似填充字节」结尾的二进制明文（如 ...\x01）多剥一截。
+    return alg.crypt_cbc(input_data=ciphertext, iv=iv)
 
 
 # ── CTR（gmssl ECB 块 + Python CTR 包装）────────────────────────────────────

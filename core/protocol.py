@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-PROTOCOL_VERSION = "3.0"
+PROTOCOL_VERSION = "3.1"
 DEFAULT_SENDER_ID = "sender@sm9.local"
 DEFAULT_RECEIVER_ID = "receiver@sm2.local"
 DEFAULT_ARTIFACTS_DIR = "artifacts"

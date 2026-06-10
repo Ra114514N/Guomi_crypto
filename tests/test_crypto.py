@@ -123,6 +123,38 @@ class TestEnvelopeWorkflow:
         assert recv["signature_ok"]
         assert recv["digest_ok"]
         assert recv["success"]
+        assert (out / "recovered.txt").exists()
+
+    @pytest.mark.parametrize("cipher,mode", [
+        ("sm4", "cbc"),
+        ("sm4", "gcm"),
+        ("zuc", "cbc"),
+    ])
+    def test_binary_roundtrip(self, tmp_path, cipher, mode):
+        # 含 0xFF/0x00 等非 UTF-8 字节的二进制明文必须逐字节无损恢复
+        payload = b"\x89PNG\r\n\x1a\n" + os.urandom(256) + b"\xff\x00\xfe\x01"
+        src = tmp_path / "image.png"
+        src.write_bytes(payload)
+        out = tmp_path / f"out_bin_{cipher}_{mode}"
+        result = run_full_workflow(src, cipher=cipher, mode=mode, output_dir=out)
+        recv = result["receive"]
+        assert recv["success"]
+        recovered = out / "recovered.png"
+        assert recovered.exists()
+        assert recovered.read_bytes() == payload
+        assert recv["decrypt_ok"]
+        assert recv["type_match"]
+        assert "PNG" in recv["detected_type"]
+        assert recv["recovered_path"] == str(recovered)
+
+    def test_tampered_filename_fails(self, plain_file, tmp_path):
+        out = tmp_path / "tamper_filename"
+        result = run_full_workflow(plain_file, cipher="sm4", mode="cbc", output_dir=out)
+        envelope = load_meta(out / "message.json")
+        envelope["header"]["filename"] = "evil.exe"
+        save_meta(out / "message.json", envelope)
+        recv = _receive_with_master(out, result)
+        assert not recv["success"]
 
     def test_tampered_ciphertext_fails(self, plain_file, tmp_path):
         out = tmp_path / "tamper_ciphertext"

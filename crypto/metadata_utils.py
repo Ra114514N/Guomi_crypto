@@ -19,6 +19,7 @@ def build_header(
     timestamp: str,
     seq: int,
     integrity_algo: str = "hmac-sm3",
+    filename: str = "",
 ) -> dict:
     return {
         "version": version,
@@ -28,6 +29,7 @@ def build_header(
         "kex_mode": kex_mode,
         "sender_id": sender_id,
         "receiver_id": receiver_id,
+        "filename": filename,
         "session_id": session_id,
         "timestamp": timestamp,
         "seq": seq,

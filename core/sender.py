@@ -105,6 +105,7 @@ def send(
         session_id=session_id,
         timestamp=timestamp,
         seq=seq,
+        filename=Path(plaintext_path).name,
     )
     header_bytes = header_to_bytes(header)
 
@@ -139,6 +140,7 @@ def send(
 
     return {
         "algo_label": algo_label,
+        "filename": Path(plaintext_path).name,
         "plain_digest": plain_digest.hex(),
         "auth_tag": auth_tag.hex(),
         "signature_hex": envelope["signature_b64"],
