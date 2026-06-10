@@ -56,9 +56,9 @@ d:\11_crypto\scu\
 │       └── benchmark_tab.py 性能测试页（已从导航屏蔽，文件保留）
 │
 ├── core/                   ← 业务逻辑（仅按需扩展返回字段，不改算法逻辑）
-│   ├── protocol.py         协议常量（版本 3.0，套件 ID）
-│   ├── sender.py           发送端流程
-│   ├── receiver.py         接收端验证（返回 claimed/computed HMAC & 摘要供对比展示）
+│   ├── protocol.py         协议常量（版本 3.1，套件 ID）
+│   ├── sender.py           发送端流程（按原始字节读明文，header 携带 filename）
+│   ├── receiver.py         接收端验证（返回 claimed/computed HMAC & 摘要、文件类型对比、恢复路径）
 │   ├── workflow.py          一键完整流程（sender + receiver）
 │   └── benchmark.py        性能基准测试
 │
@@ -72,13 +72,18 @@ d:\11_crypto\scu\
 │   ├── kdf_utils.py        HKDF-SM3 密钥派生
 │   ├── key_utils.py        密钥读写工具
 │   ├── metadata_utils.py   envelope JSON 构建/读写/解码
+│   ├── filetype_sniffer.py magic bytes 文件类型嗅探 + 扩展名一致性检查
 │   └── file_utils.py       文件操作辅助
+│
+├── tools/
+│   └── capture_demo.py     自动截图采集（深浅主题 + 攻击场景 + 接收端滚动到底）
 │
 ├── config/
 │   └── style.json          唯一的配色数据文件（含 light + dark）
 │
 ├── tests/
-│   ├── test_crypto.py      回归测试
+│   ├── test_crypto.py      回归测试（含二进制无损往返、篡改文件名）
+│   ├── test_filetype_sniffer.py 嗅探器单测
 │   └── test_build_spec.py  打包配置守护测试（新增 GUI 模块 + shiboken6 收录检查）
 │
 ├── artifacts/              运行产物（message.json / recovered.txt 等）
@@ -122,7 +127,7 @@ d:\11_crypto\scu\
 ```json
 {
   "header": { "version", "suite_id", "cipher", "mode", "kex_mode",
-              "sender_id", "receiver_id", "session_id", "timestamp", "seq" },
+              "sender_id", "receiver_id", "filename", "session_id", "timestamp", "seq" },
   "algo_meta": { "algo", "ciphertext_len", "plain_digest_hex", "has_gcm_tag" },
   "wrapped_secret_b64": "...",
   "nonce_or_iv_b64": "...",
@@ -165,7 +170,8 @@ d:\11_crypto\scu\
 │  2. SM9签名验证（pass/fail 胶囊）   │  300px固定 │
 │  3. HMAC完整性（CompareBlock 对比） │            │
 │  4. SM3摘要比对（CompareBlock 对比）│            │
-│  5. 最终结论（ConclusionBanner）    │            │
+│  5. 文件类型识别（CompareBlock 对比）│           │
+│  6. 最终结论（ConclusionBanner）    │            │
 └─────────────────────────────────────┴────────────┘
 ```
 
@@ -179,7 +185,7 @@ d:\11_crypto\scu\
       │ step_data 信号 dict 带 "target" 字段（"sender"/"receiver"）│
       │ 发送端步骤 1-3 → target="sender"                        │
       │ 发送+篡改完成 → emit sender_done()                      │
-      │ 接收端步骤 1-5 → target="receiver"                      │
+      │ 接收端步骤 1-6 → target="receiver"                      │
       └─────────────────────────────────────────────────────────┘
     → MainWindow._on_sender_done(): 创建并 show ReceiverWindow
     → MainWindow._on_step_data(dict):
@@ -189,10 +195,10 @@ d:\11_crypto\scu\
            含 "_compare" 键: CompareBlock（信封声称值 vs 独立计算值上下对比）
            单键且值以 ✓/✗ 开头: 单胶囊 VerifyCapsuleRow
            含 "结论" 键: ConclusionBanner
-           其他: MetaCell（短数据横排）+ LongDataRow（长数据截断+复制）
+           其他: MetaCell（短数据横排）+ LongDataRow（长数据按宽度自适应省略+复制）
 ```
 
-接收端验证对比的数据来自 `core/receiver.py` 返回的 `claimed_hmac` / `computed_hmac` / `claimed_digest` / `computed_digest` 字段。SM9 签名验证无可对比的中间值，只展示 pass/fail 胶囊。
+接收端验证对比的数据来自 `core/receiver.py` 返回的 `claimed_hmac` / `computed_hmac` / `claimed_digest` / `computed_digest` / `claimed_type` / `detected_type` / `type_match` 字段（另有 `filename` / `recovered_path` / `decrypt_ok`）。SM9 签名验证无可对比的中间值，只展示 pass/fail 胶囊。
 
 ### 主题系统
 
@@ -216,6 +222,7 @@ d:\11_crypto\scu\
 | 篡改密文 | flip ciphertext 中间字节 | 签名✗ 完整性✗ 摘要✗ |
 | 篡改 IV/Nonce | flip nonce 中间字节 | 签名✗ 完整性✗ 摘要✗ |
 | 伪造接收方 ID | 改 header.receiver_id | 签名✗ 完整性✗ 摘要✗ |
+| 篡改文件名 | 改 header.filename | 签名✗ 完整性✗ 摘要✗（header 受签名+HMAC 双保护） |
 | 伪造 SM9 签名 | flip signature 中间字节 | 签名✗ 完整性✓ 摘要✓（仅签名本身被伪造） |
 
 实现在 `workers.py` 的 `_tamper_envelope()` 方法。
@@ -263,7 +270,7 @@ pyinstaller build.spec --noconfirm
 `gui/workers.py` → `WorkflowWorker.run()` 里每个 `self.step_data.emit(...)` 的 `data` 字典（注意带 `"target"` 字段区分收发端）。
 
 ### 改接收端对比展示的数据来源
-`core/receiver.py` → `receive()` 返回的 `claimed_hmac` / `computed_hmac` / `claimed_digest` / `computed_digest` 字段。
+`core/receiver.py` → `receive()` 返回的 `claimed_hmac` / `computed_hmac` / `claimed_digest` / `computed_digest` / `claimed_type` / `detected_type` / `type_match` 字段。
 
 ### 加新的攻击模拟
 1. `gui/main_window.py` 的 `self.attack_combo.addItem(...)` 加选项
@@ -284,8 +291,11 @@ pyinstaller build.spec --noconfirm
 ### 改窗口控制按钮
 `gui/styles.py` → `win_control_style` 变量 + `gui/main_window.py` → `_win_control_button()`
 
-### 让系统支持加密任意文件（非文本）
-`core/receiver.py` 第 83 行 `write_text(...)` 改为 `write_bytes()`，输出文件名保留原扩展名。
+### 验证 GUI 改动效果（截图采集）
+```powershell
+python tools/capture_demo.py 前缀 [攻击键]   # 攻击键: none/ciphertext/nonce/receiver_id/filename/signature
+```
+自动跑完整演示并输出深浅主题各一组截图（发送端 + 接收端 + 接收端滚动到底含最终结论）。`docs_screenshot*.png` 前缀已被 gitignore。
 
 ### 重新编译 GmSSL Release DLL
 ```powershell
