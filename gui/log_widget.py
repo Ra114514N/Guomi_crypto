@@ -44,13 +44,20 @@ class LogWidget(QTextEdit):
             Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
         )
         self.setUndoRedoEnabled(False)
+        self._apply_font()
+        self._show_timestamps = True
+
+    # ── Public API ─────────────────────────────────────────────
+
+    def refresh_styles(self) -> None:
+        self._apply_font()
+        self.setStyleSheet(styles.log_style)
+
+    def _apply_font(self) -> None:
         font = QFont("Consolas")
         font.setStyleHint(QFont.Monospace)
         font.setPixelSize(styles.font_size_log)
         self.setFont(font)
-        self._show_timestamps = True
-
-    # ── Public API ─────────────────────────────────────────────
 
     def set_show_timestamps(self, on: bool) -> None:
         self._show_timestamps = on
@@ -164,10 +171,11 @@ class LogWidget(QTextEdit):
         if not self._show_timestamps:
             return ""
         ts = datetime.now().strftime("%H:%M:%S")
+        timestamp_size = max(styles.font_size_log - 1, 10)
         return (
             f'<span style="color: {styles.log_timestamp_color}; '
             f'font-family: {styles.mono_font_family}; '
-            f'font-size: {styles.font_size_log - 2}px;">'
+            f'font-size: {timestamp_size}px;">'
             f'[{ts}] </span>'
         )
 

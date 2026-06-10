@@ -57,7 +57,7 @@ font_size_title = 18
 font_size_body = 16
 font_size_mono = 15
 font_size_label = 13
-font_size_log = 13
+font_size_log = 16
 font_weight_title = 650
 font_weight_body = 500
 font_weight_mono = 600
@@ -192,7 +192,7 @@ def apply_color_scheme(scheme_name: str, is_dark: bool) -> None:
     font_size_body = _get("font_size_body", 16)
     font_size_mono = _get("font_size_mono", 15)
     font_size_label = _get("font_size_label", 13)
-    font_size_log = _get("font_size_log", 13)
+    font_size_log = _get("font_size_log", 16)
     font_weight_title = _get("font_weight_title", 650)
     font_weight_body = _get("font_weight_body", 500)
     font_weight_mono = _get("font_weight_mono", 600)

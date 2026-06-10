@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         self.algo_combo.setStyleSheet(styles.combobox_style)
         self.attack_combo.setStyleSheet(styles.combobox_style)
         self.file_edit.setStyleSheet(styles.lineedit_style)
-        self.log_output.setStyleSheet(styles.log_style)
+        self.log_output.refresh_styles()
 
         # Nav buttons
         for btn in self._nav_buttons.values():

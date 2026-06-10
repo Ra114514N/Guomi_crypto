@@ -180,7 +180,7 @@ class ReceiverWindow(QMainWindow):
     def _refresh_styles(self):
         self.centralWidget().setStyleSheet(styles.main_window_style)
         self.title_bar.setStyleSheet(styles.title_bar_style)
-        self.log_output.setStyleSheet(styles.log_style)
+        self.log_output.refresh_styles()
 
         # Log panel background
         self._log_frame.setStyleSheet(
