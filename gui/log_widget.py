@@ -166,7 +166,8 @@ class LogWidget(QTextEdit):
         ts = datetime.now().strftime("%H:%M:%S")
         return (
             f'<span style="color: {styles.log_timestamp_color}; '
-            f'font-family: {styles.mono_font_family}; font-size: 10px;">'
+            f'font-family: {styles.mono_font_family}; '
+            f'font-size: {styles.font_size_log - 2}px;">'
             f'[{ts}] </span>'
         )
 

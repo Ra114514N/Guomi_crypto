@@ -53,17 +53,17 @@ log_highlight_color = "#E5C07B"
 log_path_color = "#61AFEF"
 
 # Typography tokens (unified large font)
-font_size_title = 16
-font_size_body = 14
-font_size_mono = 13
-font_size_label = 12
-font_size_log = 12
+font_size_title = 18
+font_size_body = 16
+font_size_mono = 15
+font_size_label = 13
+font_size_log = 13
 font_weight_title = 650
 font_weight_body = 500
 font_weight_mono = 600
 font_weight_label = 500
-card_padding = 24
-card_spacing = 14
+card_padding = 16
+card_spacing = 10
 card_border_radius = 8
 
 # Capsule tokens (light-mode only, empty string means fallback to legacy)
@@ -188,17 +188,17 @@ def apply_color_scheme(scheme_name: str, is_dark: bool) -> None:
     log_path_color = _get("log_path_color", "#61AFEF")
 
     # Typography tokens
-    font_size_title = _get("font_size_title", 16)
-    font_size_body = _get("font_size_body", 14)
-    font_size_mono = _get("font_size_mono", 13)
-    font_size_label = _get("font_size_label", 12)
-    font_size_log = _get("font_size_log", 12)
+    font_size_title = _get("font_size_title", 18)
+    font_size_body = _get("font_size_body", 16)
+    font_size_mono = _get("font_size_mono", 15)
+    font_size_label = _get("font_size_label", 13)
+    font_size_log = _get("font_size_log", 13)
     font_weight_title = _get("font_weight_title", 650)
     font_weight_body = _get("font_weight_body", 500)
     font_weight_mono = _get("font_weight_mono", 600)
     font_weight_label = _get("font_weight_label", 500)
-    card_padding = _get("card_padding", 24)
-    card_spacing = _get("card_spacing", 14)
+    card_padding = _get("card_padding", 16)
+    card_spacing = _get("card_spacing", 10)
     card_border_radius = _get("card_border_radius", 8)
 
     # Capsule tokens (empty string = fallback to legacy behavior)
@@ -401,7 +401,7 @@ def update_styles() -> None:
             border: 1px solid {border_subtle};
             border-radius: 6px;
             font-family: Consolas, 'JetBrains Mono', {current_font_family};
-            font-size: 11px;
+            font-size: {font_size_log}px;
             padding: 8px 10px;
             selection-background-color: {accent_color};
             selection-color: {accent_text};

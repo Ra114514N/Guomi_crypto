@@ -159,7 +159,7 @@ class ReceiverWindow(QMainWindow):
         header.setContentsMargins(10, 0, 4, 0)
         lbl = QLabel(">_ 日志")
         lbl.setStyleSheet(
-            f"color: {styles.text_muted}; font-size: 11px; "
+            f"color: {styles.text_muted}; font-size: {styles.font_size_label - 1}px; "
             f"font-weight: 600; background: transparent;"
         )
         header.addWidget(lbl)

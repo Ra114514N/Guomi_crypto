@@ -88,7 +88,7 @@ class WorkflowWorker(QThread):
             save_key_hex(out / "receiver_pub.txt", receiver_pub)
             self.step_data.emit({"step": 2, "title": "生成 SM2 接收方密钥对",
                                  "state": "success", "target": "sender",
-                                 "data": {"公钥": receiver_pub[:48] + "...",
+                                 "data": {"公钥": receiver_pub,
                                           "存储": str(out)}})
             self.progress.emit(f"  ✓ SM2 公钥: {receiver_pub[:32]}...")
 
@@ -111,10 +111,10 @@ class WorkflowWorker(QThread):
                                  "data": {
                                      "加密算法": send_result["algo_label"],
                                      "文件名": send_result["filename"],
-                                     "明文摘要": send_result["plain_digest"][:32] + "...",
+                                     "明文摘要": send_result["plain_digest"],
                                      "密文长度": f"{meta['algo_meta']['ciphertext_len']} 字节",
-                                     "认证标签": meta["auth_tag_b64"][:32] + "...",
-                                     "SM9 签名": meta["signature_b64"][:32] + "...",
+                                     "认证标签": meta["auth_tag_b64"],
+                                     "SM9 签名": meta["signature_b64"],
                                  }})
             self.progress.emit(f"  ✓ 信封已写入: {out}/message.json")
 

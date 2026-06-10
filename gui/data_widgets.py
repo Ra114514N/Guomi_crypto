@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui import styles
+from gui.elided_label import ElidedLabel
 
 
 def _is_mono_value(value: str) -> bool:
@@ -86,7 +87,7 @@ class LongDataRow(QWidget):
     + hover-fade-in copy button.
     """
 
-    def __init__(self, key: str, full_value: str, max_chars: int = 56, parent=None):
+    def __init__(self, key: str, full_value: str, parent=None):
         super().__init__(parent)
         self._full_value = full_value
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -97,7 +98,7 @@ class LongDataRow(QWidget):
 
         # Key on left
         self._key_label = QLabel(key)
-        self._key_label.setFixedWidth(86)
+        self._key_label.setFixedWidth(96)
         self._key_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._key_label.setStyleSheet(
             f"color: {styles.text_muted}; font-size: {styles.font_size_label}px; "
@@ -106,11 +107,9 @@ class LongDataRow(QWidget):
         )
         layout.addWidget(self._key_label)
 
-        # Truncated value chip
-        display = full_value
-        if len(full_value) > max_chars:
-            display = full_value[:max_chars] + "…"
-        self._value_label = QLabel(display)
+        # Width-adaptive elided value chip — fills the row instead of cutting
+        # at a fixed character count (h_padding compensates QSS padding).
+        self._value_label = ElidedLabel(full_value, h_padding=24, compact=True)
         self._value_label.setToolTip(full_value)
         self._value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self._value_label.setStyleSheet(
@@ -140,7 +139,7 @@ class LongDataRow(QWidget):
             f"  border: 1px solid transparent;"
             f"  border-radius: 4px;"
             f"  padding: 2px 8px;"
-            f"  font-size: 11px;"
+            f"  font-size: {styles.font_size_label}px;"
             f"  font-family: {styles.current_font_family};"
             f"}}"
         )
@@ -151,7 +150,7 @@ class LongDataRow(QWidget):
             f"  border: 1px solid {styles.mono_color};"
             f"  border-radius: 4px;"
             f"  padding: 2px 8px;"
-            f"  font-size: 11px;"
+            f"  font-size: {styles.font_size_label}px;"
             f"  font-family: {styles.current_font_family};"
             f"}}"
             f"QPushButton:hover {{"
@@ -193,7 +192,7 @@ class VerifyCapsule(QFrame):
         self._label_text = label
         self._state = self.STATE_PENDING
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(56)
+        self.setFixedHeight(64)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
@@ -273,7 +272,7 @@ class VerifyCapsuleRow(QWidget):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         # Fix the height so QScrollArea doesn't recompute geometry mid-scroll.
-        self.setFixedHeight(60)
+        self.setFixedHeight(68)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -333,7 +332,7 @@ class ConclusionBanner(QFrame):
         icon = "🛡️" if ok else "⚠️"
 
         icon_lbl = QLabel(icon)
-        icon_lbl.setStyleSheet("font-size: 20px; background: transparent;")
+        icon_lbl.setStyleSheet("font-size: 22px; background: transparent;")
         layout.addWidget(icon_lbl)
 
         text_lbl = QLabel(text)
@@ -361,7 +360,7 @@ class CompareBlock(QFrame):
 
     def __init__(self, title: str, claimed_label: str, claimed_value: str,
                  computed_label: str, computed_value: str, is_match: bool,
-                 max_chars: int = 40, parent=None):
+                 parent=None):
         super().__init__(parent)
         self.setObjectName("CompareBlock")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -392,7 +391,7 @@ class CompareBlock(QFrame):
         # Section title
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet(
-            f"color: {styles.text_muted}; font-size: 11px; font-weight: 500; "
+            f"color: {styles.text_muted}; font-size: {styles.font_size_label}px; font-weight: 500; "
             f"letter-spacing: 0.5px; background: transparent; "
             f"font-family: {styles.current_font_family};"
         )
@@ -407,25 +406,20 @@ class CompareBlock(QFrame):
             row_layout.setSpacing(8)
 
             lbl = QLabel(label_text)
-            lbl.setFixedWidth(90)
+            lbl.setFixedWidth(100)
             lbl.setStyleSheet(
-                f"color: {styles.text_muted}; font-size: 12px; "
+                f"color: {styles.text_muted}; font-size: {styles.font_size_label}px; "
                 f"background: transparent; font-family: {styles.current_font_family};"
             )
             row_layout.addWidget(lbl)
 
-            # Truncate long values
-            display = value_text
-            if len(value_text) > max_chars:
-                display = value_text[:max_chars] + "..."
-
-            val_lbl = QLabel(display)
+            # Width-adaptive elision: show as much of the value as fits.
+            val_lbl = ElidedLabel(value_text, compact=True)
+            val_lbl.setToolTip(value_text)
             val_lbl.setStyleSheet(
-                f"color: {text_color}; font-size: 12px; "
+                f"color: {text_color}; font-size: {styles.font_size_mono}px; "
                 f"font-family: {styles.mono_font_family}; background: transparent;"
             )
-            if len(value_text) > max_chars:
-                val_lbl.setToolTip(value_text)
             row_layout.addWidget(val_lbl, 1)
 
             return row
@@ -442,7 +436,7 @@ class CompareBlock(QFrame):
         badge.setStyleSheet(
             f"color: {text_color}; background-color: {badge_bg}; "
             f"border: 1px solid {badge_border}; border-radius: 12px; "
-            f"padding: 4px 12px; font-size: 12px; font-weight: 600; "
+            f"padding: 4px 12px; font-size: {styles.font_size_label}px; font-weight: 600; "
             f"font-family: {styles.current_font_family};"
         )
         badge.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)

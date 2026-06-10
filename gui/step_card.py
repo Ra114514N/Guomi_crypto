@@ -88,8 +88,8 @@ class StepCardWidget(QFrame):
         self._data_widget = QWidget()
         self._data_widget.setStyleSheet("background: transparent;")
         self._data_layout = QVBoxLayout(self._data_widget)
-        self._data_layout.setContentsMargins(34, 4, 0, 0)
-        self._data_layout.setSpacing(10)
+        self._data_layout.setContentsMargins(24, 2, 0, 0)
+        self._data_layout.setSpacing(8)
         layout.addWidget(self._data_widget)
 
     def _apply_card_border(self):
@@ -132,8 +132,10 @@ class StepCardWidget(QFrame):
             key, value = next(iter(data.items()))
             if isinstance(value, str) and (value.startswith("✓") or value.startswith("✗")):
                 ok = value.startswith("✓")
+                detail = value[1:].strip()
+                label = f"{key}：{detail}" if detail else key
                 from gui.data_widgets import VerifyCapsuleRow
-                self._data_layout.addWidget(VerifyCapsuleRow([(key, ok)], animate=animate))
+                self._data_layout.addWidget(VerifyCapsuleRow([(label, ok)], animate=animate))
                 return
 
         # 3. Conclusion banner
