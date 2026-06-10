@@ -21,6 +21,12 @@ build/
 dist/
 *.dll.debug.bak
 
+# Packaged releases (large binaries, ~200MB)
+release/
+
+# Ad-hoc verification screenshots
+docs_screenshot*.png
+
 # IDE / tools
 .claude/
 
