@@ -11,7 +11,7 @@
 - HMAC-SM3：为非 GCM 模式提供完整性保护。
 - SM9：对完整协议 transcript 进行数字签名与验签。
 - CLI：提供环境检查、演示、发送、基准测试和测试入口。
-- GUI：基于 PySide6 的图形界面，以时间线卡片逐步展示协议中间过程，并内置攻击模拟与多主题切换。
+- GUI：基于 PySide6 的**双窗口**图形界面——发送端主窗口 + 自动弹出的接收端验证窗口，以时间线卡片逐步展示协议中间过程，内置攻击模拟与深浅主题切换。
 
 ## 协议报文
 
@@ -79,22 +79,25 @@ crypto/
   metadata_utils.py   envelope 读写
 
 gui/
-  run.py            GUI 入口
-  main_window.py    主窗口（顶栏 + 左导航 + 时间线 + 日志台）
-  timeline_view.py  步骤卡片时间线容器
-  step_card.py      单步骤卡片
-  data_widgets.py   卡片内数据组件（键值格、长串截断、验证胶囊）
-  workers.py        后台线程（含攻击模拟篡改逻辑）
-  log_widget.py     语法高亮日志台
-  styles.py         QSS 主题系统
-  theme_selector.py 主题切换弹窗
-  effects.py        动效与自绘组件
+  run.py              GUI 入口
+  main_window.py      发送端主窗口（顶栏 + 左导航 + 时间线 + 日志台，发送完成后弹出接收端）
+  receiver_window.py  接收端独立窗口（验证时间线 + 日志台）
+  timeline_view.py    步骤卡片时间线容器
+  step_card.py        单步骤卡片（内容驱动渲染路由）
+  data_widgets.py     卡片内数据组件（键值格、长串截断、验证胶囊、结论横幅、对比块）
+  workers.py          后台线程（含攻击模拟篡改逻辑）
+  log_widget.py       语法高亮日志台
+  styles.py           QSS 主题系统
+  effects.py          动效与自绘组件
+  elided_label.py     省略号标题标签
+  frameless_resize.py 无边框窗口边缘缩放光标支持
 
 config/
-  style.json        配色主题数据
+  style.json        配色主题数据（「默认」主题的 light/dark 两套）
 
 tests/
-  test_crypto.py    回归测试
+  test_crypto.py      回归测试
+  test_build_spec.py  打包配置守护测试
 
 cli.py                命令行入口
 plain.txt             示例明文
@@ -168,20 +171,28 @@ python -m pytest tests/ -q
 python gui/run.py
 ```
 
-GUI 采用深色控制台风格，左侧导航切换四个功能页：
+GUI 采用**发送端 + 接收端双窗口**架构（同进程视觉分离），默认浅色模式启动。
 
-- 演示：选择算法后点击「启动演示」，以时间线卡片逐步展示发送与接收的 6 个核心步骤，验证结果以并行胶囊徽章呈现。
-- 收发：分步演示发送与接收过程。
+发送端为主控窗口，左侧导航两个功能页：
+
+- 演示：选择算法后点击「⚡ 启动演示」，时间线卡片逐步展示发送端 3 个步骤（SM9 主密钥、SM2 密钥对、加密·签名·封装）。
 - 环境：查看运行环境与各算法组件状态。
-- 性能：运行基准测试。
 
-顶栏控件：
+发送端步骤完成后**自动弹出接收端窗口**（滑入 + 淡入动画），展示 5 个验证步骤：
 
-- 算法选择器：sm4-gcm / sm4-cbc / sm4-ctr / zuc。
+1. 加载信封 · SM2 解封会话秘密
+2. SM9 签名验证（pass/fail 胶囊）
+3. HMAC 完整性验证（信封声称值 vs 独立计算值上下对比块；GCM 模式显示认证标签胶囊）
+4. SM3 摘要比对（同样的对比块）
+5. 最终结论（通过/失败横幅）
+
+发送端顶栏控件：
+
+- 算法选择器：zuc / sm4-gcm / sm4-cbc / sm4-ctr。
 - 攻击模拟：在发送后、接收前真实篡改信封，触发接收端的真实校验失败。可选「正常传输 / 篡改密文 / 篡改 IV·Nonce / 伪造接收方 ID / 伪造 SM9 签名」。
-- 主题按钮：切换默认 / 深空 / 深蓝 / 暖橙 / 墨绿 / 紫罗兰等多套配色及深浅模式。
+- 主题按钮 ◑：深色/浅色一键切换，整窗截图淡出过渡，并同步联动接收端窗口。
 
-右侧日志台实时输出带语法高亮和时间戳的执行日志。
+两个窗口均为无边框设计，支持标题栏拖动、边缘拖拽缩放与缩放光标提示。右侧日志台实时输出带语法高亮和时间戳的执行日志。
 
 ### 攻击模拟说明
 
@@ -221,11 +232,12 @@ benchmark.csv     性能测试数据
 - ZUC-128 加解密。
 - envelope 完整发送接收流程。
 - 篡改 ciphertext、nonce_or_iv、receiver_id 后验证失败。
+- 打包配置守护（新增 GUI 模块与 shiboken6 运行库的收录检查）。
 
 当前验证结果：
 
 ```text
-17 passed
+28 passed
 ```
 
 ## 说明
